@@ -13,8 +13,7 @@ pub async fn get_metrics() -> Result<String, StatusCode> {
         let mut channel_resurrection_retries = 0usize;
         let mut channel = channel.borrow_mut();
         loop {
-            match channel.send_metrics_request_to_sozu_and_read_response() {
-                Ok(response) => return Ok(response),
+            match channel.get_metrics_from_sozu() {
                 Err(metrics_channel_error) => {
                     error!(
                         "Could not write the metrics request to sozu or receive a response: {:#}",
@@ -35,11 +34,11 @@ pub async fn get_metrics() -> Result<String, StatusCode> {
 
                         channel_resurrection_retries += 1;
                         continue;
-                    } else {
-                        error!("Could not resurrect the channel");
-                        return Err(StatusCode::INTERNAL_SERVER_ERROR);
                     }
+                    error!("Could not resurrect the channel");
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
                 }
+                Ok(response) => return Ok(format!("{:?}", response)),
             }
         }
     })

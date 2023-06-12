@@ -4,7 +4,8 @@ use anyhow::{self, bail, Context};
 use sozu_command_lib::{
     channel::Channel,
     proto::command::{
-        request::RequestType, QueryMetricsOptions, Request, Response, ResponseStatus,
+        request::RequestType, response_content::ContentType, AggregatedMetrics,
+        QueryMetricsOptions, Request, Response, ResponseContent, ResponseStatus,
     },
 };
 use tracing::{debug, error, info};
@@ -32,7 +33,7 @@ impl SozuChannel {
         }
     }
 
-    pub fn send_metrics_request_to_sozu_and_read_response(&mut self) -> anyhow::Result<String> {
+    pub fn get_metrics_from_sozu(&mut self) -> anyhow::Result<AggregatedMetrics> {
         let metrics_request = Request {
             request_type: Some(RequestType::QueryMetrics(QueryMetricsOptions::default())),
         };
@@ -50,10 +51,6 @@ impl SozuChannel {
         self.channel
             .handle_events(sozu_command_lib::ready::Ready::readable());
 
-        // debug!("Read from the socket with channel.readable()");
-        // self.channel.readable().expect(
-        //     "failed to read from the socket (filling the front buffer with the socket data)",
-        // );
         loop {
             debug!("Awaiting a response from sozu");
             let response = self
@@ -65,7 +62,14 @@ impl SozuChannel {
                 ResponseStatus::Failure => bail!(response.message),
                 ResponseStatus::Ok => {
                     info!("Sozu replied with {:?}", response.content);
-                    return Ok(format!("{:?}", response.content));
+                    if let Some(ResponseContent {
+                        content_type: Some(ContentType::Metrics(aggregated_metrics)),
+                    }) = response.content
+                    {
+                        return Ok(aggregated_metrics);
+                    } else {
+                        bail!("Wrong or empty response from sozu");
+                    }
                 }
             }
         }
