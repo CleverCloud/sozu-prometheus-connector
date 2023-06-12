@@ -1,7 +1,9 @@
 pub mod metrics_server;
+pub mod sozu_channel;
 
-use crate::metrics_server::metrics_app;
+use crate::metrics_server::{get_metrics, metrics_app};
 use anyhow::Context;
+use axum::{routing::get, Router};
 use tracing::info;
 use tracing_subscriber;
 
@@ -13,11 +15,9 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .with_context(|| "Could not parse listening address")?;
 
-    // let sozu_socket_path = "/home/emmanuel/clever/sozu_for_the_win/github_repo/bin/sozu.sock";
-
     info!("Starting listening on {}/metrics", address.to_string());
 
-    let metrics_app = metrics_app();
+    let metrics_app = Router::new().route("/metrics", get(get_metrics));
 
     axum::Server::bind(&address)
         .serve(metrics_app.into_make_service())
