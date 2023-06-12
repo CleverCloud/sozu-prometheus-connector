@@ -7,17 +7,17 @@ use sozu_command_lib::{
         request::RequestType, QueryMetricsOptions, Request, Response, ResponseStatus,
     },
 };
-use tracing::info;
+use tracing::{debug, error, info};
 
 // TODO: replace this path with some env variable or config or something
 const SOZU_SOCKET_PATH: &str = "/home/emmanuel/clever/sozu_for_the_win/github_repo/bin/sozu.sock";
 
 thread_local! {
-    pub static SOZU_CHANNEL: RefCell<SozuChannel> = RefCell::new(SozuChannel::new(SOZU_SOCKET_PATH));
+    pub static SOZU_CHANNEL: RefCell<SozuChannel> = RefCell::new(SozuChannel::new());
 }
 
 pub struct SozuChannel {
-    channel: Channel<Request, Response>,
+    pub channel: Channel<Request, Response>,
 }
 
 // todo: replace with sozu_command_lib::config default values when bumping the dependency
@@ -25,22 +25,11 @@ const DEFAULT_COMMAND_BUFFER_SIZE: usize = 1_000_000;
 const DEFAULT_MAX_COMMAND_BUFFER_SIZE: usize = 2_000_000;
 
 impl SozuChannel {
-    pub fn new(sozu_socket_path: &str) -> Self {
-        let mut channel: Channel<Request, Response> = Channel::from_path(
-            sozu_socket_path,
-            DEFAULT_COMMAND_BUFFER_SIZE,
-            DEFAULT_MAX_COMMAND_BUFFER_SIZE,
-        )
-        .expect(&format!(
-            "Could not create a sozu channel from path {}",
-            sozu_socket_path
-        ));
-
-        channel
-            .blocking()
-            .expect("Could not block the sozu channel");
-
-        Self { channel }
+    pub fn new() -> Self {
+        info!("Creating the sozu channel, this was called by the local thread");
+        Self {
+            channel: new_sozu_channel().expect("Could not create channel"),
+        }
     }
 
     pub fn send_metrics_request_to_sozu_and_read_response(&mut self) -> anyhow::Result<String> {
@@ -48,14 +37,28 @@ impl SozuChannel {
             request_type: Some(RequestType::QueryMetrics(QueryMetricsOptions::default())),
         };
 
+        debug!("handling the writeable event on the channel");
+        self.channel
+            .handle_events(sozu_command_lib::ready::Ready::writable());
+
+        debug!("writing metrics request on the Sozu channel");
         self.channel
             .write_message(&metrics_request)
             .with_context(|| "Could not write metrics request on the sozu channel")?;
 
+        debug!("handling the readable event on the channel");
+        self.channel
+            .handle_events(sozu_command_lib::ready::Ready::readable());
+
+        // debug!("Read from the socket with channel.readable()");
+        // self.channel.readable().expect(
+        //     "failed to read from the socket (filling the front buffer with the socket data)",
+        // );
         loop {
+            debug!("Awaiting a response from sozu");
             let response = self
                 .channel
-                .read_message()
+                .read_message_blocking_timeout(Some(std::time::Duration::from_millis(5000)))
                 .with_context(|| "failed to read message on the sozu channel ")?;
             match response.status() {
                 ResponseStatus::Processing => info!("Sozu is processing…"),
@@ -67,4 +70,25 @@ impl SozuChannel {
             }
         }
     }
+}
+
+pub fn new_sozu_channel() -> anyhow::Result<Channel<Request, Response>> {
+    info!("Creating new sozu channel");
+
+    let mut channel: Channel<Request, Response> = Channel::from_path(
+        SOZU_SOCKET_PATH,
+        DEFAULT_COMMAND_BUFFER_SIZE,
+        DEFAULT_MAX_COMMAND_BUFFER_SIZE,
+    )
+    .with_context(|| {
+        format!(
+            "Could not create a sozu channel from path {}",
+            SOZU_SOCKET_PATH
+        )
+    })?;
+
+    channel
+        .blocking()
+        .with_context(|| "Could not block the sozu channel")?;
+    Ok(channel)
 }
