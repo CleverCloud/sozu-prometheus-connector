@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use anyhow::{self, bail, Context};
 use sozu_command_lib::{
     channel::Channel,
@@ -8,29 +6,43 @@ use sozu_command_lib::{
         QueryMetricsOptions, Request, Response, ResponseContent, ResponseStatus,
     },
 };
-use tracing::{debug, error, info};
-
-// TODO: replace this path with some env variable or config or something
-const SOZU_SOCKET_PATH: &str = "/home/emmanuel/clever/sozu_for_the_win/github_repo/bin/sozu.sock";
-
-thread_local! {
-    pub static SOZU_CHANNEL: RefCell<SozuChannel> = RefCell::new(SozuChannel::new());
-}
-
-pub struct SozuChannel {
-    pub channel: Channel<Request, Response>,
-}
+use tokio::sync::Mutex;
+use tracing::{debug, info};
 
 // todo: replace with sozu_command_lib::config default values when bumping the dependency
 const DEFAULT_COMMAND_BUFFER_SIZE: usize = 1_000_000;
 const DEFAULT_MAX_COMMAND_BUFFER_SIZE: usize = 2_000_000;
 
+lazy_static::lazy_static! {
+    /// a mutex containing a sozu channel
+    pub static ref SOZU_CHANNEL: Mutex<Option<SozuChannel>> = Mutex::new(None);
+}
+
+/// a sozu channel to be placed in a mutex and recreated when needed
+pub struct SozuChannel {
+    pub channel: Channel<Request, Response>,
+    /// usefull to recreate the channel
+    pub sozu_socket_path: String,
+}
+
+/// puts a sozu channel in the mutex, on startup
+pub async fn initialize_sozu_channel(sozu_socket_path: &str) -> anyhow::Result<()> {
+    let mut channel = SOZU_CHANNEL.lock().await;
+    if channel.is_none() {
+        *channel = Some(SozuChannel::new(sozu_socket_path)?);
+    }
+    Ok(())
+}
+
 impl SozuChannel {
-    pub fn new() -> Self {
+    pub fn new(sozu_socket_path: &str) -> anyhow::Result<Self> {
         info!("Creating the sozu channel, this was called by the local thread");
-        Self {
-            channel: new_sozu_channel().expect("Could not create channel"),
-        }
+        let channel =
+            new_sozu_channel(sozu_socket_path).with_context(|| "Could not create channel")?;
+        Ok(Self {
+            channel,
+            sozu_socket_path: sozu_socket_path.to_owned(),
+        })
     }
 
     pub fn get_metrics_from_sozu(&mut self) -> anyhow::Result<AggregatedMetrics> {
@@ -76,18 +88,18 @@ impl SozuChannel {
     }
 }
 
-pub fn new_sozu_channel() -> anyhow::Result<Channel<Request, Response>> {
+pub fn new_sozu_channel(sozu_socket_path: &str) -> anyhow::Result<Channel<Request, Response>> {
     info!("Creating new sozu channel");
 
     let mut channel: Channel<Request, Response> = Channel::from_path(
-        SOZU_SOCKET_PATH,
+        sozu_socket_path,
         DEFAULT_COMMAND_BUFFER_SIZE,
         DEFAULT_MAX_COMMAND_BUFFER_SIZE,
     )
     .with_context(|| {
         format!(
             "Could not create a sozu channel from path {}",
-            SOZU_SOCKET_PATH
+            sozu_socket_path
         )
     })?;
 
