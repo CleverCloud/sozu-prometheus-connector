@@ -38,17 +38,18 @@ pub fn get_socket_path_from_sozu_config(config_path: PathBuf) -> anyhow::Result<
         return Ok(socket_path_in_the_config);
     }
 
-    // else concatenate it with the config_path
-    let relative_path = PathBuf::from(socket_path_in_the_config);
+    // else compute the absolute path
+    let config_file_path = PathBuf::from(socket_path_in_the_config);
 
-    let mut absolute_path = config_path
+    let mut parent_path = config_path
         .parent()
         .with_context(|| format!("Could not get parent path of {:?}", config_path))?
         .to_owned();
-    absolute_path.push(relative_path);
+
+    parent_path.push(config_file_path);
 
     // canonicalize to remove dots and double dots
-    let total_path = absolute_path
+    let total_path = parent_path
         .canonicalize()
         .with_context(|| "Could not canonicalize path")?;
     let socket_path = total_path

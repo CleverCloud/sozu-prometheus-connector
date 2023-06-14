@@ -50,18 +50,10 @@ impl SozuChannel {
             request_type: Some(RequestType::QueryMetrics(QueryMetricsOptions::default())),
         };
 
-        debug!("handling the writeable event on the channel");
-        self.channel
-            .handle_events(sozu_command_lib::ready::Ready::writable());
-
         debug!("writing metrics request on the Sozu channel");
         self.channel
             .write_message(&metrics_request)
             .with_context(|| "Could not write metrics request on the sozu channel")?;
-
-        debug!("handling the readable event on the channel");
-        self.channel
-            .handle_events(sozu_command_lib::ready::Ready::readable());
 
         loop {
             debug!("Awaiting a response from sozu");

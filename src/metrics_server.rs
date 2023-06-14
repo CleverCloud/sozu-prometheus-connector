@@ -1,11 +1,7 @@
-use axum::{http::StatusCode, routing::get, Router};
+use axum::http::StatusCode;
 use tracing::error;
 
 use crate::sozu_channel::{new_sozu_channel, SozuChannel, SOZU_CHANNEL};
-
-pub fn metrics_app() -> Router {
-    Router::new().route("/metrics", get(get_metrics))
-}
 
 pub async fn get_metrics() -> Result<String, StatusCode> {
     let mut channel_opt = SOZU_CHANNEL.lock().await;

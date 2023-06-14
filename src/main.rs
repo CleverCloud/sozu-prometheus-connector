@@ -4,7 +4,8 @@ pub mod metrics_server;
 pub mod sozu_channel;
 
 use crate::{
-    config::parse_connector_config_file_for_sozu_config_path, metrics_server::get_metrics,
+    config::{get_socket_path_from_sozu_config, parse_connector_config_file_for_sozu_config_path},
+    metrics_server::get_metrics,
     sozu_channel::initialize_sozu_channel,
 };
 use anyhow::Context;
@@ -26,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     let sozu_configuration_path = parse_connector_config_file_for_sozu_config_path(&args.config)?;
 
     info!("Loading Sōzu configuration");
-    let sozu_socket_path = config::get_socket_path_from_sozu_config(sozu_configuration_path)
+    let sozu_socket_path = get_socket_path_from_sozu_config(sozu_configuration_path)
         .with_context(|| "Could not load sozu config")?;
 
     info!(
