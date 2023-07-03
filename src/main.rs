@@ -2,6 +2,7 @@ pub mod cli;
 pub mod config;
 pub mod metrics_server;
 pub mod sozu_channel;
+pub mod prometheus;
 
 use crate::{
     config::{get_socket_path_from_sozu_config, parse_connector_config_file_for_sozu_config_path},

@@ -1,7 +1,10 @@
 use axum::http::StatusCode;
 use tracing::error;
 
-use crate::sozu_channel::{new_sozu_channel, SozuChannel, SOZU_CHANNEL};
+use crate::{
+    prometheus::convert_metrics_to_prometheus,
+    sozu_channel::{new_sozu_channel, SozuChannel, SOZU_CHANNEL},
+};
 
 pub async fn get_metrics() -> Result<String, StatusCode> {
     let mut channel_opt = SOZU_CHANNEL.lock().await;
@@ -42,7 +45,11 @@ pub async fn get_metrics() -> Result<String, StatusCode> {
                     error!("Too many channel resurrection retries");
                     return Err(StatusCode::INTERNAL_SERVER_ERROR);
                 }
-                Ok(response) => return Ok(format!("{:?}", response)),
+                Ok(aggregated_metrics) => {
+                    let prometheus_format = convert_metrics_to_prometheus(aggregated_metrics);
+
+                    return Ok(prometheus_format);
+                }
             }
         }
     }
