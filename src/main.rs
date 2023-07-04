@@ -1,8 +1,8 @@
 pub mod cli;
 pub mod config;
 pub mod metrics_server;
-pub mod sozu_channel;
 pub mod prometheus;
+pub mod sozu_channel;
 
 use crate::{
     config::{get_socket_path_from_sozu_config, parse_connector_config_file_for_sozu_config_path},
@@ -12,7 +12,7 @@ use crate::{
 use anyhow::Context;
 use axum::{routing::get, Router};
 use clap::Parser;
-use tracing::{debug, info};
+use tracing::info;
 use tracing_subscriber;
 
 #[tokio::main]
