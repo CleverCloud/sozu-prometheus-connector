@@ -65,7 +65,7 @@ impl SozuChannel {
                 ResponseStatus::Processing => info!("Sozu is processing…"),
                 ResponseStatus::Failure => bail!(response.message),
                 ResponseStatus::Ok => {
-                    info!("Sozu replied with {:#?}", response.content);
+                    info!("Sozu replied with {:?}", response.content);
                     if let Some(ResponseContent {
                         content_type: Some(ContentType::Metrics(aggregated_metrics)),
                     }) = response.content
