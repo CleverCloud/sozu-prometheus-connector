@@ -5,7 +5,7 @@ pub mod prometheus;
 pub mod sozu_channel;
 
 use crate::{
-    config::{get_socket_path_from_sozu_config, parse_connector_config_file_for_sozu_config_path},
+    config::{get_socket_path_from_sozu_config, ConnectorConfig},
     metrics_server::get_metrics,
     sozu_channel::initialize_sozu_channel,
 };
@@ -25,21 +25,23 @@ async fn main() -> anyhow::Result<()> {
         args.config,
     );
 
-    let sozu_configuration_path = parse_connector_config_file_for_sozu_config_path(&args.config)?;
+    let connector_config = ConnectorConfig::parse_from_file(&args.config)?;
 
     info!("Loading Sōzu configuration");
-    let sozu_socket_path = get_socket_path_from_sozu_config(sozu_configuration_path)
-        .with_context(|| "Could not load sozu config")?;
+    let sozu_socket_path =
+        get_socket_path_from_sozu_config(connector_config.parse_sozu_config_path())
+            .with_context(|| "Could not load sozu config")?;
 
     info!(
         "Initializing channel to sozu socket at path {:?}",
         sozu_socket_path
     );
-    initialize_sozu_channel(&sozu_socket_path)
+    initialize_sozu_channel(&sozu_socket_path.to_string())
         .await
         .with_context(|| "Could not initialize a channel to sozu. Check that the proxy is up.")?;
 
-    let address: std::net::SocketAddr = "127.0.0.1:3000"
+    let address: std::net::SocketAddr = connector_config
+        .listening_address
         .parse()
         .with_context(|| "Could not parse listening address")?;
 
