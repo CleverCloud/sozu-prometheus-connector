@@ -9,7 +9,6 @@ use clap::Parser;
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     /// Path to the configuration file of the prometheus connector,
-    /// MUST BE ABSOLUTE
     #[arg(short = 'c', long = "config")]
     pub config: PathBuf,
 }

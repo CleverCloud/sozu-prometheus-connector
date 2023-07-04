@@ -1,24 +1,31 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Context;
 use config::{Config, File};
+use serde::Deserialize;
 use sozu_command_lib::config::FileConfig;
 
-pub fn parse_connector_config_file_for_sozu_config_path(
-    config_file: &PathBuf,
-) -> anyhow::Result<PathBuf> {
-    let settings = Config::builder()
-        .add_source(config::File::from(config_file.as_path()).required(true))
-        .build()
-        .with_context(|| format!("Could not build config from path {:?}", config_file))?
-        .try_deserialize::<HashMap<String, String>>()
-        .with_context(|| format!("Could not deserialize file {:?}", config_file))?;
+#[derive(Deserialize)]
+pub struct ConnectorConfig {
+    pub sozu_configuration_path: String,
+    pub listening_address: String,
+}
 
-    let sozu_configuration_path = settings
-        .get("sozu_configuration_path")
-        .with_context(|| "No parameter 'sozu_configuration_path' in the config")?;
-    let path_buf = PathBuf::from(sozu_configuration_path);
-    Ok(path_buf)
+impl ConnectorConfig {
+    pub fn parse_from_file(config_file: &PathBuf) -> anyhow::Result<Self> {
+        let config = Config::builder()
+            .add_source(config::File::from(config_file.as_path()).required(true))
+            .build()
+            .with_context(|| format!("Could not build config from path {:?}", config_file))?
+            .try_deserialize::<ConnectorConfig>()
+            .with_context(|| format!("Could not deserialize file {:?}", config_file))?;
+
+        Ok(config)
+    }
+
+    pub fn parse_sozu_config_path(&self) -> PathBuf {
+        PathBuf::from(&self.sozu_configuration_path)
+    }
 }
 
 pub fn get_socket_path_from_sozu_config(config_path: PathBuf) -> anyhow::Result<String> {

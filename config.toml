@@ -1,2 +1,4 @@
 # absolute path to the config file used by Sozu on the machine
 sozu_configuration_path = "/home/emmanuel/clever/sozu_for_the_win/github_repo/bin/config.toml"
+# address on which to listen. Must be parsable to the SocketAddr type
+listening_address = "0.0.0.0:3000"
