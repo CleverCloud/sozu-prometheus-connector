@@ -5,11 +5,22 @@ packages the responses in a Prometheus format and sends them back in a HTTP resp
 
 ## Configure
 
-In the `config.toml`, you have to indicate the absolute path to the configuration file
+In the `config.toml` of this repository,
+you have to indicate the absolute path to the configuration file
 of the Sōzu that runs on the machine.
 
 ```toml
 sozu_configuration_path = "/path/to/sozu/on/the/machine/config.toml"
+```
+
+The Sōzu config file will be parsed to find to unix socket on which to write requests to Sōzu.
+
+You will have to provide a socket address on which the prometheus connector will
+wait for HTTP requests on the `/metrics` path.
+
+```toml
+# address on which to listen. Must be parsable to the SocketAddr type
+listening_address = "0.0.0.0:3000"
 ```
 
 ## How to test
