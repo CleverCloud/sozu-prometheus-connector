@@ -2,13 +2,14 @@ use sozu_command_lib::proto::command::{
     filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics, Percentiles,
 };
 
+/// Convert aggregated metrics into prometheus serialize one
+#[tracing::instrument(skip_all)]
 pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> String {
     let mut formatted_for_prometheus = "".to_string();
 
     // metrics of the main process
     for (metric_name, filtered_metric) in aggregated_metrics.main.iter() {
-        let metric_lines =
-            create_metric_lines(&metric_name, &vec![("worker", "main")], filtered_metric);
+        let metric_lines = create_metric_lines(metric_name, &[("worker", "main")], filtered_metric);
         formatted_for_prometheus.push_str(&metric_lines);
     }
 
@@ -18,7 +19,7 @@ pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> S
         for (metric_name, filtered_metric) in worker_metrics.proxy {
             let metric_lines = create_metric_lines(
                 &metric_name,
-                &vec![("worker", &worker_id)],
+                &[("worker", worker_id.as_str())],
                 &filtered_metric,
             );
             formatted_for_prometheus.push_str(&metric_lines);
@@ -29,7 +30,7 @@ pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> S
             for (metric_name, filtered_metric) in cluster_metrics.cluster {
                 let metric_lines = create_metric_lines(
                     &metric_name,
-                    &vec![("cluster_id", &cluster_id)],
+                    &[("cluster_id", cluster_id.as_str())],
                     &filtered_metric,
                 );
                 formatted_for_prometheus.push_str(&metric_lines);
@@ -45,7 +46,10 @@ pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> S
                 for (metric_name, filtered_metric) in metrics {
                     let metric_lines = create_metric_lines(
                         &metric_name,
-                        &vec![("cluster_id", &cluster_id), ("backend_id", &backend_id)],
+                        &[
+                            ("cluster_id", cluster_id.as_str()),
+                            ("backend_id", backend_id.as_str()),
+                        ],
                         &filtered_metric,
                     );
                     formatted_for_prometheus.push_str(&metric_lines);
@@ -57,9 +61,10 @@ pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> S
     formatted_for_prometheus
 }
 
+#[tracing::instrument(skip(filtered_metric))]
 fn create_metric_lines(
     metric_name: &str,
-    labels: &Vec<(&str, &str)>,
+    labels: &[(&str, &str)],
     filtered_metric: &FilteredMetrics,
 ) -> String {
     let mut lines = String::new();
@@ -84,9 +89,10 @@ fn create_metric_lines(
     lines
 }
 
+#[tracing::instrument(skip(percentiles))]
 fn create_percentile_lines(
     metric_name: &str,
-    labels: &Vec<(&str, &str)>,
+    labels: &[(&str, &str)],
     percentiles: &Percentiles,
 ) -> String {
     let mut lines = String::new();
@@ -144,10 +150,12 @@ fn create_percentile_lines(
     lines
 }
 
+#[tracing::instrument(skip_all)]
 fn replace_dots_with_underscores(str: &str) -> String {
-    str.replace(".", "_")
+    str.replace('.', "_")
 }
 
+#[tracing::instrument(skip_all)]
 fn get_metric_type(filtered_metric: &FilteredMetrics) -> String {
     match &filtered_metric.inner {
         Some(inner) => match inner {
@@ -163,13 +171,15 @@ fn get_metric_type(filtered_metric: &FilteredMetrics) -> String {
 
 // typically:
 // # TYPE service_time percentiles
+#[tracing::instrument(skip_all)]
 fn create_type_line(name: &str, filtered_metric: &FilteredMetrics) -> String {
     format!("# TYPE {} {}", name, get_metric_type(filtered_metric))
 }
 
 // typically:
 // http_active_requests{worker="0"} 0
-fn create_metric_line_with_labels<T>(name: &str, labels: &Vec<(&str, &str)>, value: T) -> String
+#[tracing::instrument(skip_all)]
+fn create_metric_line_with_labels<T>(name: &str, labels: &[(&str, &str)], value: T) -> String
 where
     T: ToString,
 {
