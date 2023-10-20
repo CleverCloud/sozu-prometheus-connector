@@ -68,6 +68,11 @@ fn create_metric_lines(
     filtered_metric: &FilteredMetrics,
 ) -> String {
     let mut lines = String::new();
+    // skip percentiles entirely to avoid newlines
+    if matches!(filtered_metric.inner, Some(Inner::Percentiles(_))) {
+        return lines;
+    }
+
     let metric_name = replace_dots_with_underscores(metric_name);
     let type_line = create_type_line(&metric_name, filtered_metric);
     let metric_lines = match &filtered_metric.inner {
@@ -181,7 +186,7 @@ fn get_metric_type(filtered_metric: &FilteredMetrics) -> String {
     match &filtered_metric.inner {
         Some(inner) => match inner {
             Inner::Gauge(_) => "gauge".to_string(),
-            Inner::Count(_) => "count".to_string(),
+            Inner::Count(_) => "counter".to_string(),
             Inner::Time(_) => "time".to_string(),
             Inner::Percentiles(_) => "histogram".to_string(),
             Inner::TimeSerie(_) => "time series".to_string(),
@@ -195,8 +200,8 @@ fn get_metric_type(filtered_metric: &FilteredMetrics) -> String {
 #[tracing::instrument(skip_all)]
 fn create_type_line(name: &str, filtered_metric: &FilteredMetrics) -> String {
     // temporary fix to skip conversion of percentiles
-    if matches!(filtered_metric.inner,Some(Inner::Percentiles(_))) {
-        return String::new()
+    if matches!(filtered_metric.inner, Some(Inner::Percentiles(_))) {
+        return String::new();
     }
     format!("# TYPE {} {}", name, get_metric_type(filtered_metric))
 }
