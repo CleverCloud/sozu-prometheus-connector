@@ -14,7 +14,7 @@ use sozu_client::Sender;
 use sozu_command_lib::proto::command::{
     self, request::RequestType, response_content::ContentType, QueryMetricsOptions, ResponseContent,
 };
-use tracing::error;
+use tracing::{error, debug};
 
 use crate::svc::{http::server, telemetry::prometheus::convert_metrics_to_prometheus};
 
@@ -85,7 +85,7 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
 
     // -------------------------------------------------------------------------
     // Query Sōzu to get its internal metrics
-
+    debug!("Querying Sōzu metrics");
     let mut sozu_metrics = match state
         .client
         .send(RequestType::QueryMetrics(QueryMetricsOptions::default()))
