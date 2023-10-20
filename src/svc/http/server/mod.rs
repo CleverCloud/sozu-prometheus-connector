@@ -12,7 +12,7 @@ use axum::{
 use hyper::Server;
 use sozu_client::{channel::ConnectionProperties, config::canonicalize_command_socket, Client};
 use sozu_command_lib::config::Config;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::svc::config::ConnectorConfiguration;
 
@@ -65,6 +65,7 @@ pub async fn serve(
         opts.socket = canonicalize_command_socket(&config.sozu.configuration, &sozu_config)
             .map_err(Error::CanonicalizeSocket)?;
     }
+    debug!("Sōzu command socket is {:?}", opts.socket);
 
     let client = Client::try_new(opts).await.map_err(Error::CreateClient)?;
     let state = State::from(client);
