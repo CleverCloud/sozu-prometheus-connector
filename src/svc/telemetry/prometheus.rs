@@ -4,6 +4,7 @@ use sozu_command_lib::proto::command::{
     filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics,
 };
 use tracing::debug;
+use urlencoding::encode;
 
 #[derive(PartialEq)]
 enum MetricType {
@@ -39,8 +40,9 @@ impl LabeledMetric {
     }
 
     fn with_label(&mut self, label_name: &str, label_value: &str) {
+        let label_value = encode(label_value);
         self.labels
-            .push((label_name.to_owned(), label_value.to_owned()));
+            .push((label_name.to_owned(), label_value.into()));
     }
 
     /// remove dots from the name, replace with underscores
@@ -218,6 +220,61 @@ fn produce_lines_for_one_metric_name(
 #[tracing::instrument(skip_all)]
 fn replace_dots_with_underscores(str: &str) -> String {
     str.replace('.', "_")
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::BTreeMap;
+
+    use sozu_command_lib::proto::command::{
+        filtered_metrics::Inner, AggregatedMetrics, ClusterMetrics, FilteredMetrics, WorkerMetrics,
+    };
+
+    use super::*;
+
+    #[test]
+    fn encode_one_counter() {
+        let cluster_id = "http://my-cluster-id.com/api?param=value".to_string();
+
+        let metric_name = "http_response_status";
+        let one_filtered_metric = FilteredMetrics {
+            inner: Some(Inner::Gauge(3)),
+        };
+        let mut cluster = BTreeMap::new();
+        cluster.insert(metric_name.to_owned(), one_filtered_metric);
+
+        let cluster_metrics = ClusterMetrics {
+            cluster,
+            backends: Vec::new(),
+        };
+
+        let mut clusters = BTreeMap::new();
+        clusters.insert(cluster_id, cluster_metrics);
+
+        let worker_metrics = WorkerMetrics {
+            proxy: BTreeMap::new(),
+            clusters,
+        };
+
+        let mut workers = BTreeMap::new();
+        workers.insert("WORKER-01".to_string(), worker_metrics);
+
+
+        let aggregated_metrics = AggregatedMetrics {
+            main: BTreeMap::new(),
+            workers,
+        };
+
+
+
+        let prometheus_metrics = convert_metrics_to_prometheus(aggregated_metrics);
+
+        let expected = r#"# TYPE http_response_status gauge
+http_response_status{cluster_id="http%3A%2F%2Fmy-cluster-id.com%2Fapi%3Fparam%3Dvalue"} 3
+"#;
+
+        assert_eq!(expected.to_string(), prometheus_metrics);
+    }
 }
 
 /* this is all false
