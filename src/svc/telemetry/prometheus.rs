@@ -4,6 +4,7 @@ use sozu_command_lib::proto::command::{
     filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics,
 };
 use tracing::debug;
+use urlencoding::encode;
 
 #[derive(PartialEq)]
 enum MetricType {
@@ -39,8 +40,9 @@ impl LabeledMetric {
     }
 
     fn with_label(&mut self, label_name: &str, label_value: &str) {
+        let label_value = encode(label_value);
         self.labels
-            .push((label_name.to_owned(), label_value.to_owned()));
+            .push((label_name.to_owned(), label_value.into()));
     }
 
     /// remove dots from the name, replace with underscores

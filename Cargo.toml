@@ -30,3 +30,4 @@ thiserror = "^1.0.44"
 tokio = { version = "^1.29.1", features = ["macros", "rt", "signal"] }
 tracing = "^0.1.37"
 tracing-subscriber = "^0.3.17"
+urlencoding = "2.1.3"
