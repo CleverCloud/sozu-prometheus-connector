@@ -40,12 +40,12 @@ pub enum Error {
 #[derive(Clone, Debug)]
 pub struct State {
     pub client: Client,
+    pub config: Arc<ConnectorConfiguration>,
 }
 
-impl From<Client> for State {
-    #[tracing::instrument]
-    fn from(client: Client) -> Self {
-        Self { client }
+impl State {
+    fn new(client: Client, config: Arc<ConnectorConfiguration>) -> Self {
+        Self { client, config }
     }
 }
 
@@ -68,7 +68,7 @@ pub async fn serve(
     debug!("Sōzu command socket is {:?}", opts.socket);
 
     let client = Client::try_new(opts).await.map_err(Error::CreateClient)?;
-    let state = State::from(client);
+    let state = State::new(client, config.to_owned());
 
     // -------------------------------------------------------------------------
     // Create router

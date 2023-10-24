@@ -76,8 +76,10 @@ async fn main(args: Args) -> Result<(), Error> {
     // -------------------------------------------------------------------------
     // Initialize logging system
     let _guard = match &config.sentry {
-        Some(sentry_ctx) => logging::initialize_with_sentry(args.verbosity  as usize, sentry_ctx.to_owned())
-            .map_err(Error::Logging)?,
+        Some(sentry_ctx) => {
+            logging::initialize_with_sentry(args.verbosity as usize, sentry_ctx.to_owned())
+                .map_err(Error::Logging)?
+        }
         None => logging::initialize(args.verbosity as usize)
             .map(|_| LoggingInitGuard::default())
             .map_err(Error::Logging)?,
