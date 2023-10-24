@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use sozu_command_lib::proto::command::{
     filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics,
@@ -59,11 +59,7 @@ impl LabeledMetric {
     /// http_active_requests{worker="0"} 0
     fn metric_line(&self) -> String {
         let printable_metric_name = self.printable_name();
-        let formatted_labels: String = self
-            .labels
-            .iter()
-            .map(|(label_name, label_value)| format!("{}=\"{}\"", label_name, label_value))
-            .collect();
+        let formatted_labels: String = format_labels(&self.labels);
         let value = match &self.value.inner {
             Some(inner) => {
                 match inner {
@@ -107,9 +103,12 @@ impl From<FilteredMetrics> for LabeledMetric {
 
 /// Convert aggregated metrics into prometheus serialize one
 #[tracing::instrument(skip_all)]
-pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> String {
+pub fn convert_metrics_to_prometheus(
+    aggregated_metrics: AggregatedMetrics,
+    convert_backend_metrics: bool,
+) -> String {
     debug!("Converting metrics to prometheus format");
-    let labeled_metrics = apply_labels(aggregated_metrics);
+    let labeled_metrics = apply_labels(aggregated_metrics, convert_backend_metrics);
 
     let metric_names = get_unique_metric_names(&labeled_metrics);
 
@@ -126,7 +125,10 @@ pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> S
 }
 
 /// assign worker_id and cluster_id as labels
-fn apply_labels(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
+fn apply_labels(
+    aggregated_metrics: AggregatedMetrics,
+    aggregate_backend_metrics: bool,
+) -> Vec<LabeledMetric> {
     let mut labeled_metrics = Vec::new();
 
     // metrics of the main process
@@ -157,24 +159,69 @@ fn apply_labels(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
                 labeled_metrics.push(labeled);
             }
 
-            // backend metrics (several backends for a given cluster)
-            for backend_metrics in cluster_metrics.backends {
-                let BackendMetrics {
-                    backend_id,
-                    metrics,
-                } = backend_metrics;
+            if aggregate_backend_metrics {
+                let aggregated_values = cluster_metrics.backends.iter().fold(
+                    HashMap::new(),
+                    |mut acc, backend_metrics| {
+                        for (metric_name, value) in &backend_metrics.metrics {
+                            match acc.get_mut(&metric_name) {
+                                Some(aggregated) => {
+                                    if let Some(new_value) =
+                                        aggregate_filtered_metrics(aggregated, value)
+                                    {
+                                        acc.insert(metric_name, new_value);
+                                    }
+                                }
+                                None => {
+                                    acc.insert(metric_name, value.to_owned());
+                                }
+                            }
+                        }
+                        acc
+                    },
+                );
 
-                for (metric_name, value) in metrics {
+                for (metric_name, value) in aggregated_values {
                     let mut labeled = LabeledMetric::from(value.clone());
-                    labeled.with_name(&metric_name);
+                    labeled.with_name(metric_name);
                     labeled.with_label("cluster_id", &cluster_id);
-                    labeled.with_label("backend_id", &backend_id);
                     labeled_metrics.push(labeled);
+                }
+            } else {
+                // backend metrics (several backends for a given cluster)
+                for backend_metrics in cluster_metrics.backends {
+                    let BackendMetrics {
+                        backend_id,
+                        metrics,
+                    } = backend_metrics;
+
+                    for (metric_name, value) in metrics {
+                        let mut labeled = LabeledMetric::from(value.clone());
+                        labeled.with_name(&metric_name);
+                        labeled.with_label("cluster_id", &cluster_id);
+                        labeled.with_label("backend_id", &backend_id);
+                        labeled_metrics.push(labeled);
+                    }
                 }
             }
         }
     }
     labeled_metrics
+}
+
+fn aggregate_filtered_metrics(
+    left: &FilteredMetrics,
+    right: &FilteredMetrics,
+) -> Option<FilteredMetrics> {
+    match (&left.inner, &right.inner) {
+        (Some(Inner::Gauge(a)), Some(Inner::Gauge(b))) => Some(FilteredMetrics {
+            inner: Some(Inner::Gauge(a + b)),
+        }),
+        (Some(Inner::Count(a)), Some(Inner::Count(b))) => Some(FilteredMetrics {
+            inner: Some(Inner::Count(a + b)),
+        }),
+        _ => None,
+    }
 }
 
 fn get_unique_metric_names(labeled_metrics: &Vec<LabeledMetric>) -> Vec<String> {
@@ -222,6 +269,14 @@ fn replace_dots_with_underscores(str: &str) -> String {
     str.replace('.', "_")
 }
 
+fn format_labels(labels: &[(String, String)]) -> String {
+    labels
+        .iter()
+        .map(|(name, value)| format!("{}=\"{}\"", name, value))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 #[cfg(test)]
 mod test {
     use std::collections::BTreeMap;
@@ -259,15 +314,12 @@ mod test {
         let mut workers = BTreeMap::new();
         workers.insert("WORKER-01".to_string(), worker_metrics);
 
-
         let aggregated_metrics = AggregatedMetrics {
             main: BTreeMap::new(),
             workers,
         };
 
-
-
-        let prometheus_metrics = convert_metrics_to_prometheus(aggregated_metrics);
+        let prometheus_metrics = convert_metrics_to_prometheus(aggregated_metrics, true);
 
         let expected = r#"# TYPE http_response_status gauge
 http_response_status{cluster_id="http%3A%2F%2Fmy-cluster-id.com%2Fapi%3Fparam%3Dvalue"} 3

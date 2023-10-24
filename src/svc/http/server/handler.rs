@@ -14,7 +14,7 @@ use sozu_client::Sender;
 use sozu_command_lib::proto::command::{
     self, request::RequestType, response_content::ContentType, QueryMetricsOptions, ResponseContent,
 };
-use tracing::{error, debug};
+use tracing::{debug, error};
 
 use crate::svc::{http::server, telemetry::prometheus::convert_metrics_to_prometheus};
 
@@ -97,7 +97,10 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
                     content_type: Some(ContentType::Metrics(aggregated_metrics)),
                 }),
             ..
-        }) => convert_metrics_to_prometheus(aggregated_metrics),
+        }) => convert_metrics_to_prometheus(
+            aggregated_metrics,
+            state.config.aggregate_backend_metrics,
+        ),
         Ok(response) => {
             let headers = res.headers_mut();
             let message = serde_json::json!({
