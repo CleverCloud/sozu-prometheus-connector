@@ -23,6 +23,33 @@ wait for HTTP requests on the `/metrics` path.
 listening_address = "0.0.0.0:3000"
 ```
 
+you can also chose to flatten all metric and to compound them if they have the same name,
+turning thig:
+
+```
+# TYPE bytes_out counter
+bytes_out{worker="0"} 246
+bytes_out{cluster_id="MyCluster",backend_id="the-backend-to-my-app"} 250
+bytes_out{cluster_id="MyCluster",backend_id="the-backend-to-my-app-2"} 250
+bytes_out{worker="1"} 246
+bytes_out{cluster_id="MyCluster",backend_id="the-backend-to-my-app"} 250
+bytes_out{cluster_id="MyCluster",backend_id="the-backend-to-my-app-2"} 250
+```
+
+into this:
+
+```
+# TYPE bytes_out counter
+bytes_out{} 492
+bytes_out{cluster_id="MyCluster"} 1000
+```
+
+You can do this with:
+
+```toml
+aggregate-backend-metrics = true
+```
+
 ## How to test
 
 1. Run Sōzu on your machine
