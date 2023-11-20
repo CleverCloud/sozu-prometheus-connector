@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use sozu_command_lib::proto::command::{
-    filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics,
+    filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredHistogram, FilteredMetrics,
 };
 use tracing::debug;
 use urlencoding::encode;
@@ -10,7 +10,7 @@ use urlencoding::encode;
 enum MetricType {
     Counter,
     Gauge,
-    // Histogram,
+    Histogram,
     Unsupported,
 }
 
@@ -19,7 +19,7 @@ impl Display for MetricType {
         match *self {
             MetricType::Counter => write!(f, "counter"),
             MetricType::Gauge => write!(f, "gauge"),
-            // MetricType::Histogram => write!(f, "histogram"),
+            MetricType::Histogram => write!(f, "histogram"),
             MetricType::Unsupported => write!(f, "unsupported"), // should never happen
         }
     }
@@ -69,6 +69,9 @@ impl LabeledMetric {
                         // should not happen at that point
                         return String::new();
                     }
+                    Inner::Histogram(hist) => {
+                        return histogram_lines(&printable_metric_name, &formatted_labels, hist)
+                    }
                 }
             }
             None => return String::new(),
@@ -80,12 +83,34 @@ impl LabeledMetric {
     }
 }
 
+fn histogram_lines(metric_name: &str, formatted_labels: &str, hist: &FilteredHistogram) -> String {
+    let mut lines = String::new();
+    let sum_line = format!("{}_sum{{{}}}{}", metric_name, formatted_labels, hist.sum);
+    lines.push_str(&sum_line);
+    lines.push('\n');
+
+    let count_line = format!("{}_sum{{{}}}{}", metric_name, formatted_labels, hist.sum);
+    lines.push_str(&count_line);
+
+    for bucket in &hist.buckets {
+        lines.push('\n');
+        let bucket_line = format!(
+            "{}{{\"le\"={},{}}}{}",
+            metric_name, bucket.le, formatted_labels, bucket.count
+        );
+        lines.push_str(&bucket_line);
+    }
+
+    lines
+}
+
 impl From<FilteredMetrics> for LabeledMetric {
     fn from(value: FilteredMetrics) -> Self {
         let metric_type = match &value.inner {
             Some(inner) => match inner {
                 Inner::Gauge(_) => MetricType::Gauge,
                 Inner::Count(_) => MetricType::Counter,
+                Inner::Histogram(_) => MetricType::Histogram,
                 Inner::Time(_) | Inner::Percentiles(_) | Inner::TimeSerie(_) => {
                     MetricType::Unsupported
                 }
