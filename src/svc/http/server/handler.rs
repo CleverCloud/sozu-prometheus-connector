@@ -6,9 +6,9 @@ use std::time::SystemTime;
 
 use axum::{
     extract::State,
-    http::{HeaderValue, Request, Response},
+    http::{HeaderValue, Request, Response, StatusCode, header},
+    body::Body,
 };
-use hyper::{Body, StatusCode};
 use prometheus::{Encoder, TextEncoder};
 use sozu_client::Sender;
 use sozu_command_lib::proto::command::{
@@ -57,7 +57,7 @@ pub async fn healthz(req: Request<Body>) -> Response<Body> {
     }
 
     headers.insert(
-        hyper::header::CONTENT_TYPE,
+        header::CONTENT_TYPE,
         HeaderValue::from_str(mime::APPLICATION_JSON.as_ref())
             .expect("constant to be iso8859-1 compliant"),
     );
@@ -65,7 +65,7 @@ pub async fn healthz(req: Request<Body>) -> Response<Body> {
     let message = serde_json::json!({"message": "Everything is fine! 🚀"}).to_string();
 
     headers.insert(
-        hyper::header::CONTENT_LENGTH,
+        header::CONTENT_LENGTH,
         HeaderValue::from_str(&message.len().to_string())
             .expect("constant to be iso8859-1 compliant"),
     );
@@ -113,13 +113,13 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
             .to_string();
 
             headers.insert(
-                hyper::header::CONTENT_TYPE,
+                header::CONTENT_TYPE,
                 HeaderValue::from_str(mime::APPLICATION_JSON.as_ref())
                     .expect("constant to be iso8859-1 compliant"),
             );
 
             headers.insert(
-                hyper::header::CONTENT_LENGTH,
+                header::CONTENT_LENGTH,
                 HeaderValue::from_str(&message.len().to_string())
                     .expect("buffer size to be iso8859-1 compliant"),
             );
@@ -138,13 +138,13 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
             let message = serde_json::json!({"error": err.to_string() }).to_string();
 
             headers.insert(
-                hyper::header::CONTENT_TYPE,
+                header::CONTENT_TYPE,
                 HeaderValue::from_str(mime::APPLICATION_JSON.as_ref())
                     .expect("constant to be iso8859-1 compliant"),
             );
 
             headers.insert(
-                hyper::header::CONTENT_LENGTH,
+                header::CONTENT_LENGTH,
                 HeaderValue::from_str(&message.len().to_string())
                     .expect("buffer size to be iso8859-1 compliant"),
             );
@@ -171,13 +171,13 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
         let message = serde_json::json!({"error": err.to_string() }).to_string();
 
         headers.insert(
-            hyper::header::CONTENT_TYPE,
+            header::CONTENT_TYPE,
             HeaderValue::from_str(mime::APPLICATION_JSON.as_ref())
                 .expect("constant to be iso8859-1 compliant"),
         );
 
         headers.insert(
-            hyper::header::CONTENT_LENGTH,
+            header::CONTENT_LENGTH,
             HeaderValue::from_str(&message.len().to_string())
                 .expect("buffer size to be iso8859-1 compliant"),
         );
@@ -196,13 +196,13 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
     let headers = res.headers_mut();
 
     headers.insert(
-        hyper::header::CONTENT_TYPE,
+        header::CONTENT_TYPE,
         HeaderValue::from_str(mime::TEXT_PLAIN_UTF_8.as_ref())
             .expect("constant to be iso8859-1 compliant"),
     );
 
     headers.insert(
-        hyper::header::CONTENT_LENGTH,
+        header::CONTENT_LENGTH,
         HeaderValue::from_str(&buf.len().to_string())
             .expect("buffer size to be iso8859-1 compliant"),
     );

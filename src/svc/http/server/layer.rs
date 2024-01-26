@@ -3,9 +3,13 @@
 //! This module provides middlewares to give to the server implementation.
 //! It could be seen as interceptor in h2.
 
-use std::{fmt::Debug, time::Instant};
+use std::time::Instant;
 
-use axum::{http::Request, middleware::Next};
+use axum::{
+    body::Body,
+    http::{header, Request},
+    middleware::Next,
+};
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use tracing::{info, info_span, Instrument};
@@ -35,36 +39,33 @@ static ACCESS_REQUEST_DURATION: Lazy<IntCounterVec> = Lazy::new(|| {
 // Access
 
 #[tracing::instrument(skip_all)]
-pub async fn access<T>(req: Request<T>, next: Next<T>) -> axum::response::Response
-where
-    T: Debug,
-{
-    // -------------------------------------------------------------------------
+pub async fn access(req: Request<Body>, next: Next) -> axum::response::Response {
+    // ---------------------------------------------------------------------------------------------
     // Retrieve information
     let method = req.method().to_string();
     let uri = req.uri().to_string();
     let headers = req.headers();
 
     let origin = headers
-        .get(hyper::header::ORIGIN)
+        .get(header::ORIGIN)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("<none>")
         .to_string();
 
     let referer = headers
-        .get(hyper::header::REFERER)
+        .get(header::REFERER)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("<none>")
         .to_string();
 
     let forwarded = headers
-        .get(hyper::header::FORWARDED)
+        .get(header::FORWARDED)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("<none>")
         .to_string();
 
     let agent = headers
-        .get(hyper::header::USER_AGENT)
+        .get(header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("<none>")
         .to_string();
@@ -74,20 +75,20 @@ where
         .host()
         .unwrap_or_else(|| {
             headers
-                .get(hyper::header::HOST)
+                .get(header::HOST)
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("<none>")
         })
         .to_string();
 
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------------
     // Call next handler
     let begin = Instant::now();
     let res = next.run(req).instrument(info_span!("next.run")).await;
-    let duration = begin.elapsed().as_millis();
+    let duration = begin.elapsed().as_micros();
 
-    // -------------------------------------------------------------------------
-    // Log the access
+    // ---------------------------------------------------------------------------------------------
+    // Emit the access log
     let status = res.status().as_u16();
 
     ACCESS_REQUEST
@@ -106,7 +107,7 @@ where
         forwarded = forwarded,
         agent = agent,
         host = host,
-        duration = duration,
+        duration = format!("{duration}us"),
         status = status,
         "Request received"
     );

@@ -1,20 +1,24 @@
 //! # Server module
 //!
-//! This module provide a server implementation with a lite router
+//! This module provides a server implementation with a router based on the
+//! crate [`axum`].
 
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
-    middleware::{self},
+    middleware,
     routing::{any, get},
     Router,
 };
-use hyper::Server;
 use sozu_client::{channel::ConnectionProperties, config::canonicalize_command_socket, Client};
 use sozu_command_lib::config::Config;
+use tokio::net::TcpListener;
 use tracing::{debug, info};
 
 use crate::svc::config::ConnectorConfiguration;
+
+// -----------------------------------------------------------------------------
+// Export module
 
 pub mod handler;
 pub mod layer;
@@ -24,10 +28,10 @@ pub mod layer;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("failed to bind server, {0}")]
-    Bind(hyper::Error),
-    #[error("failed to serve content, {0}")]
-    Serve(hyper::Error),
+    #[error("failed to bind on socket '{0}', {1}")]
+    Bind(SocketAddr, std::io::Error),
+    #[error("failed to listen on socket '{0}', {1}")]
+    Serve(SocketAddr, std::io::Error),
     #[error("failed to create client, {0}")]
     CreateClient(sozu_client::Error),
     #[error("failed to canonicalize path to command socket, {0}")]
@@ -65,8 +69,8 @@ pub async fn serve(
         opts.socket = canonicalize_command_socket(&config.sozu.configuration, &sozu_config)
             .map_err(Error::CanonicalizeSocket)?;
     }
-    debug!("Sōzu command socket is {:?}", opts.socket);
 
+    debug!("Sōzu command socket is {:?}", opts.socket);
     let client = Client::try_new(opts).await.map_err(Error::CreateClient)?;
     let state = State::new(client, config.to_owned());
 
@@ -83,17 +87,18 @@ pub async fn serve(
         .layer(middleware::from_fn(layer::access));
 
     // -------------------------------------------------------------------------
-    // Serve router
+    // Bind to listener and serve content
+    let listener = TcpListener::bind(&config.listening_address)
+        .await
+        .map_err(|err| Error::Bind(config.listening_address.to_owned(), err))?;
+
     info!(
         addr = config.listening_address.to_string(),
         "Begin to listen on address"
     );
-
-    Server::try_bind(&config.listening_address)
-        .map_err(Error::Bind)?
-        .serve(router.into_make_service())
+    axum::serve(listener, router.into_make_service())
         .await
-        .map_err(Error::Serve)?;
+        .map_err(|err| Error::Serve(config.listening_address, err))?;
 
     Ok(())
 }
