@@ -5,9 +5,9 @@
 use std::time::SystemTime;
 
 use axum::{
-    extract::State,
-    http::{HeaderValue, Request, Response, StatusCode, header},
     body::Body,
+    extract::State,
+    http::{header, HeaderValue, Request, Response, StatusCode},
 };
 use prometheus::{Encoder, TextEncoder};
 use sozu_client::Sender;
