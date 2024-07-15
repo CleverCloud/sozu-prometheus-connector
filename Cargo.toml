@@ -21,8 +21,8 @@ paw = "^1.0.0"
 prometheus = "^0.13.3"
 serde = { version = "^1.0.195", features = ["derive"] }
 serde_json = "^1.0.111"
-sentry = { version = "^0.32.1", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
-sentry-tracing = "^0.32.1"
+sentry = { version = "^0.34.0", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+sentry-tracing = "^0.34.0"
 sozu-client = "^0.4.0"
 sozu-command-lib = "^1.0.0"
 thiserror = "^1.0.56"
