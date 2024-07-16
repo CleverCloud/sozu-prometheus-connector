@@ -42,8 +42,6 @@ pub struct Sozu {
 pub struct ConnectorConfiguration {
     #[serde(rename = "listening-address")]
     pub listening_address: SocketAddr,
-    #[serde(rename = "aggregate-backend-metrics")]
-    pub aggregate_backend_metrics: bool,
     #[serde(rename = "sozu")]
     pub sozu: Sozu,
     #[serde(rename = "sentry")]

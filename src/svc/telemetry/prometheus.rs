@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 use sozu_command_lib::proto::command::{
     filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics,
@@ -19,14 +19,13 @@ impl Display for MetricType {
         match *self {
             MetricType::Counter => write!(f, "counter"),
             MetricType::Gauge => write!(f, "gauge"),
-            // MetricType::Histogram => write!(f, "histogram"),
             MetricType::Unsupported => write!(f, "unsupported"), // should never happen
         }
     }
 }
 
 /// convertible to prometheus metric in this form:
-/// metric_name{label="something",second_lable="something-else"} value
+/// metric_name{label="something",second_label="something-else"} value
 struct LabeledMetric {
     metric_name: String,
     labels: Vec<(String, String)>,
@@ -58,14 +57,15 @@ impl LabeledMetric {
 
     /// http_active_requests{worker="0"} 0
     fn metric_line(&self) -> String {
-        let printable_metric_name = self.printable_name();
-        let formatted_labels: String = format_labels(&self.labels);
         let value = match &self.value.inner {
             Some(inner) => {
                 match inner {
                     Inner::Gauge(value) => value.to_string(),
                     Inner::Count(value) => value.to_string(),
-                    Inner::Time(_) | Inner::Percentiles(_) | Inner::TimeSerie(_) => {
+                    Inner::Histogram(_)
+                    | Inner::Time(_)
+                    | Inner::Percentiles(_)
+                    | Inner::TimeSerie(_) => {
                         // should not happen at that point
                         return String::new();
                     }
@@ -73,6 +73,8 @@ impl LabeledMetric {
             }
             None => return String::new(),
         };
+        let printable_metric_name = self.printable_name();
+        let formatted_labels: String = format_labels(&self.labels);
         format!(
             "{}{{{}}} {}",
             printable_metric_name, formatted_labels, value
@@ -86,9 +88,10 @@ impl From<FilteredMetrics> for LabeledMetric {
             Some(inner) => match inner {
                 Inner::Gauge(_) => MetricType::Gauge,
                 Inner::Count(_) => MetricType::Counter,
-                Inner::Time(_) | Inner::Percentiles(_) | Inner::TimeSerie(_) => {
-                    MetricType::Unsupported
-                }
+                Inner::Histogram(_)
+                | Inner::Time(_)
+                | Inner::Percentiles(_)
+                | Inner::TimeSerie(_) => MetricType::Unsupported,
             },
             None => MetricType::Unsupported,
         };
@@ -103,12 +106,9 @@ impl From<FilteredMetrics> for LabeledMetric {
 
 /// Convert aggregated metrics into prometheus serialize one
 #[tracing::instrument(skip_all)]
-pub fn convert_metrics_to_prometheus(
-    aggregated_metrics: AggregatedMetrics,
-    convert_backend_metrics: bool,
-) -> String {
+pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> String {
     debug!("Converting metrics to prometheus format");
-    let labeled_metrics = apply_labels(aggregated_metrics, convert_backend_metrics);
+    let labeled_metrics = apply_labels(aggregated_metrics);
 
     let metric_names = get_unique_metric_names(&labeled_metrics);
 
@@ -125,10 +125,7 @@ pub fn convert_metrics_to_prometheus(
 }
 
 /// assign worker_id and cluster_id as labels
-fn apply_labels(
-    aggregated_metrics: AggregatedMetrics,
-    aggregate_backend_metrics: bool,
-) -> Vec<LabeledMetric> {
+fn apply_labels(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
     let mut labeled_metrics = Vec::new();
 
     // metrics of the main process
@@ -140,169 +137,41 @@ fn apply_labels(
         labeled_metrics.push(labeled);
     }
 
-    if aggregate_backend_metrics {
-        return aggregate_metrics_by_cluster(aggregated_metrics);
+    // proxying metrics
+    for (metric_name, value) in aggregated_metrics.proxying.iter() {
+        let mut labeled = LabeledMetric::from(value.clone());
+        labeled.with_name(metric_name);
+
+        labeled_metrics.push(labeled);
     }
 
-    // if metrics are not aggregated,
-    // worker metrics
-    for (worker_id, worker_metrics) in aggregated_metrics.workers {
-        // proxy metrics (bytes in, accept queue…)
-        for (metric_name, value) in worker_metrics.proxy {
+    // cluster metrics (applications)
+    for (cluster_id, cluster_metrics) in aggregated_metrics.clusters {
+        for (metric_name, value) in cluster_metrics.cluster {
             let mut labeled = LabeledMetric::from(value.clone());
             labeled.with_name(&metric_name);
-            labeled.with_label("worker", &worker_id);
+            labeled.with_label("cluster_id", &cluster_id);
             labeled_metrics.push(labeled);
         }
 
-        // cluster metrics (applications)
-        for (cluster_id, cluster_metrics) in worker_metrics.clusters {
-            for (metric_name, value) in cluster_metrics.cluster {
+        // backend metrics (several backends for a given cluster)
+        for backend_metrics in cluster_metrics.backends {
+            let BackendMetrics {
+                backend_id,
+                metrics,
+            } = backend_metrics;
+
+            for (metric_name, value) in metrics {
                 let mut labeled = LabeledMetric::from(value.clone());
                 labeled.with_name(&metric_name);
                 labeled.with_label("cluster_id", &cluster_id);
+                labeled.with_label("backend_id", &backend_id);
                 labeled_metrics.push(labeled);
-            }
-
-            // backend metrics (several backends for a given cluster)
-            for backend_metrics in cluster_metrics.backends {
-                let BackendMetrics {
-                    backend_id,
-                    metrics,
-                } = backend_metrics;
-
-                for (metric_name, value) in metrics {
-                    let mut labeled = LabeledMetric::from(value.clone());
-                    labeled.with_name(&metric_name);
-                    labeled.with_label("cluster_id", &cluster_id);
-                    labeled.with_label("backend_id", &backend_id);
-                    labeled_metrics.push(labeled);
-                }
             }
         }
     }
 
     labeled_metrics
-}
-
-/// flatten all metrics to have only the cluster_id being a relevant label
-fn aggregate_metrics_by_cluster(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
-    let mut labeled_metrics = Vec::new();
-
-    // cluster_id -> (metric_name -> value)
-    let mut acc: HashMap<String, HashMap<String, FilteredMetrics>> = HashMap::new();
-
-    // PROXY WIDE METRICS
-    let mut proxy_wide_metrics: HashMap<String, FilteredMetrics> = HashMap::new();
-
-    for (metric_name, new_value) in &aggregated_metrics.main {
-        match proxy_wide_metrics.get_mut(metric_name) {
-            Some(old_value) => {
-                if let Some(updated_value) = aggregate_filtered_metrics(old_value, &new_value) {
-                    proxy_wide_metrics.insert(metric_name.to_string(), updated_value);
-                }
-            }
-            None => {
-                proxy_wide_metrics.insert(metric_name.to_string(), new_value.to_owned());
-            }
-        }
-    }
-    acc.insert("metrics_with_no_cluster".to_string(), proxy_wide_metrics);
-
-    for (_worker_id, worker_metrics) in aggregated_metrics.workers {
-        for (metric_name, new_value) in &worker_metrics.proxy {
-            match acc.get_mut("metrics_with_no_cluster") {
-                Some(aggregated_map) => match aggregated_map.get_mut(metric_name) {
-                    Some(old_value) => {
-                        if let Some(updated_value) =
-                            aggregate_filtered_metrics(old_value, &new_value)
-                        {
-                            aggregated_map.insert(metric_name.to_string(), updated_value);
-                        } else {
-                            aggregated_map.insert(metric_name.to_owned(), new_value.to_owned());
-                        }
-                    }
-                    None => {
-                        aggregated_map.insert(metric_name.to_string(), new_value.to_owned());
-                    }
-                },
-                None => {}
-            }
-        }
-
-        for (cluster_id, cluster_metrics) in &worker_metrics.clusters {
-            for (metric_name, new_value) in &cluster_metrics.cluster {
-                match acc.get_mut(cluster_id) {
-                    Some(aggregated_map) => {
-                        if let Some(old_value) = aggregated_map.get_mut(metric_name) {
-                            if let Some(updated_value) =
-                                aggregate_filtered_metrics(old_value, &new_value)
-                            {
-                                aggregated_map.insert(metric_name.to_owned(), updated_value);
-                            }
-                        } else {
-                            aggregated_map.insert(metric_name.to_owned(), new_value.to_owned());
-                        }
-                    }
-                    None => {
-                        let mut new_map = HashMap::new();
-                        new_map.insert(metric_name.to_owned(), new_value.to_owned());
-                        acc.insert(cluster_id.to_owned(), new_map);
-                    }
-                }
-            }
-
-            for backend_metrics in &cluster_metrics.backends {
-                for (metric_name, new_value) in &backend_metrics.metrics {
-                    match acc.get_mut(cluster_id) {
-                        Some(aggregated_map) => {
-                            if let Some(old_value) = aggregated_map.get_mut(metric_name) {
-                                if let Some(updated_value) =
-                                    aggregate_filtered_metrics(old_value, &new_value)
-                                {
-                                    aggregated_map.insert(metric_name.to_owned(), updated_value);
-                                }
-                            } else {
-                                aggregated_map.insert(metric_name.to_owned(), new_value.to_owned());
-                            }
-                        }
-                        None => {
-                            let mut new_map = HashMap::new();
-                            new_map.insert(metric_name.to_owned(), new_value.to_owned());
-                            acc.insert(cluster_id.to_owned(), new_map);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    for (cluster_id, metrics) in acc {
-        for (metric_name, value) in metrics {
-            let mut labeled = LabeledMetric::from(value.clone());
-            labeled.with_name(&metric_name);
-            if &cluster_id != "metrics_with_no_cluster" {
-                labeled.with_label("cluster_id", &cluster_id);
-            }
-            labeled_metrics.push(labeled);
-        }
-    }
-    return labeled_metrics;
-}
-
-fn aggregate_filtered_metrics(
-    left: &FilteredMetrics,
-    right: &FilteredMetrics,
-) -> Option<FilteredMetrics> {
-    match (&left.inner, &right.inner) {
-        (Some(Inner::Gauge(a)), Some(Inner::Gauge(b))) => Some(FilteredMetrics {
-            inner: Some(Inner::Gauge(a + b)),
-        }),
-        (Some(Inner::Count(a)), Some(Inner::Count(b))) => Some(FilteredMetrics {
-            inner: Some(Inner::Count(a + b)),
-        }),
-        _ => None,
-    }
 }
 
 fn get_unique_metric_names(labeled_metrics: &Vec<LabeledMetric>) -> Vec<String> {
@@ -363,7 +232,7 @@ mod test {
     use std::collections::BTreeMap;
 
     use sozu_command_lib::proto::command::{
-        filtered_metrics::Inner, AggregatedMetrics, ClusterMetrics, FilteredMetrics, WorkerMetrics,
+        filtered_metrics::Inner, AggregatedMetrics, ClusterMetrics, FilteredMetrics,
     };
 
     use super::*;
@@ -387,20 +256,12 @@ mod test {
         let mut clusters = BTreeMap::new();
         clusters.insert(cluster_id, cluster_metrics);
 
-        let worker_metrics = WorkerMetrics {
-            proxy: BTreeMap::new(),
-            clusters,
-        };
-
-        let mut workers = BTreeMap::new();
-        workers.insert("WORKER-01".to_string(), worker_metrics);
-
         let aggregated_metrics = AggregatedMetrics {
-            main: BTreeMap::new(),
-            workers,
+            clusters,
+            ..Default::default()
         };
 
-        let prometheus_metrics = convert_metrics_to_prometheus(aggregated_metrics, true);
+        let prometheus_metrics = convert_metrics_to_prometheus(aggregated_metrics);
 
         let expected = r#"# TYPE http_response_status gauge
 http_response_status{cluster_id="http%3A%2F%2Fmy-cluster-id.com%2Fapi%3Fparam%3Dvalue"} 3
@@ -409,84 +270,3 @@ http_response_status{cluster_id="http%3A%2F%2Fmy-cluster-id.com%2Fapi%3Fparam%3D
         assert_eq!(expected.to_string(), prometheus_metrics);
     }
 }
-
-/* this is all false
-
-/// convert a Sōzu Percentiles struct into prometheus histogram lines:
-/// ```
-/// # TYPE metric_name histogram
-/// metric_name_bucket{le="0.5"} value
-/// metric_name_bucket{le="0.9"} value
-/// metric_name_bucket{le="0.99"} value
-/// metric_name_bucket{le="0.999"} value
-/// metric_name_bucket{le="0.9999"} value
-/// metric_name_bucket{le="0.99999"} value
-/// metric_name_bucket{le="1"} value
-/// metric_name_sum sum-of-measurements
-/// metric_name_count percentiles.samples
-/// ```
-/// (additionnal labels not show between the brackets)
-#[tracing::instrument(skip(percentiles))]
-fn create_percentile_lines(
-    metric_name: &str,
-    labels: &[(&str, &str)],
-    percentiles: &Percentiles,
-) -> String {
-    let bucket_name = format!("{}_bucket", metric_name);
-    let sum = 0; // we can not compute it as of version 0.15.3 of sozu-command-lib
-
-    let mut lines = String::new();
-    let sample_line = create_metric_line_with_labels(
-        &format!("{}_samples", metric_name),
-        labels,
-        percentiles.samples,
-    );
-    let p_50_line = create_histogram_line(&bucket_name, "0.5", labels, percentiles.p_50);
-    let p_90_line = create_histogram_line(&bucket_name, "0.9", labels, percentiles.p_90);
-    let p_99_line = create_histogram_line(&bucket_name, "0.99", labels, percentiles.p_99);
-    let p_99_9_line = create_histogram_line(&bucket_name, "0.999", labels, percentiles.p_99_9);
-    let p_99_99_line = create_histogram_line(&bucket_name, "0.9999", labels, percentiles.p_99_99);
-    let p_99_999_line =
-        create_histogram_line(&bucket_name, "0.99999", labels, percentiles.p_99_999);
-    let p_100_line = create_histogram_line(&bucket_name, "1", labels, percentiles.p_100);
-    let inf_line = create_histogram_line(&bucket_name, "+Inf", labels, percentiles.p_100);
-    let sum_line = create_metric_line_with_labels(&format!("{}_sum", metric_name), labels, sum);
-    lines.push_str(&sample_line);
-    lines.push('\n');
-    lines.push_str(&p_50_line);
-    lines.push('\n');
-    lines.push_str(&p_90_line);
-    lines.push('\n');
-    lines.push_str(&p_99_line);
-    lines.push('\n');
-    lines.push_str(&p_99_9_line);
-    lines.push('\n');
-    lines.push_str(&p_99_99_line);
-    lines.push('\n');
-    lines.push_str(&p_99_999_line);
-    lines.push('\n');
-    lines.push_str(&p_100_line);
-    lines.push('\n');
-    lines.push_str(&inf_line);
-    lines.push('\n');
-    lines.push_str(&sum_line);
-    lines.push('\n');
-
-    lines
-}
-
-fn create_histogram_line<T>(
-    bucket_name: &str,
-    less_than: &str,
-    labels: &[(&str, &str)],
-    value: T,
-) -> String
-where
-    T: ToString,
-{
-    let mut labels = labels.to_owned();
-    labels.push(("le", less_than));
-    create_metric_line_with_labels(bucket_name, &labels, value)
-}
-
-*/
