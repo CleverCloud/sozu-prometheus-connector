@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, iter};
 
 use sozu_command_lib::proto::command::{
     filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics,
@@ -10,7 +10,7 @@ use urlencoding::encode;
 enum MetricType {
     Counter,
     Gauge,
-    // Histogram,
+    Histogram,
     Unsupported,
 }
 
@@ -19,6 +19,7 @@ impl Display for MetricType {
         match *self {
             MetricType::Counter => write!(f, "counter"),
             MetricType::Gauge => write!(f, "gauge"),
+            MetricType::Histogram => write!(f, "histogram"),
             MetricType::Unsupported => write!(f, "unsupported"), // should never happen
         }
     }
@@ -49,36 +50,83 @@ impl LabeledMetric {
         self.metric_name.replace('.', "_")
     }
 
+    /// Create a type line, typically:
+    ///
     /// # TYPE protocol_https gauge
     fn type_line(&self) -> String {
         let printable_metric_name = self.printable_name();
         format!("# TYPE {} {}", printable_metric_name, self.metric_type)
     }
 
+    /// Format labels in a comma-separated list:
+    ///
+    /// ```plain
+    /// "label"="value","other"="value"
+    /// ```
+    fn formatted_labels(&self) -> String {
+        self.labels
+            .iter()
+            .map(|(name, value)| format!("{}=\"{}\"", name, value))
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+
+    /// Create a metric line, typically:
+    ///
+    /// ```plain
     /// http_active_requests{worker="0"} 0
+    /// ```
+    /// For histograms, several lines are produced: sum, count, buckets
     fn metric_line(&self) -> String {
-        let value = match &self.value.inner {
+        let printable_metric_name = self.printable_name();
+        let formatted_labels = self.formatted_labels();
+        match &self.value.inner {
             Some(inner) => {
                 match inner {
-                    Inner::Gauge(value) => value.to_string(),
-                    Inner::Count(value) => value.to_string(),
-                    Inner::Histogram(_)
-                    | Inner::Time(_)
-                    | Inner::Percentiles(_)
-                    | Inner::TimeSerie(_) => {
+                    Inner::Gauge(value) => format!(
+                        "{}{{{}}} {}",
+                        printable_metric_name, formatted_labels, value
+                    ),
+                    Inner::Count(value) => format!(
+                        "{}{{{}}} {}",
+                        printable_metric_name, formatted_labels, value
+                    ),
+                    Inner::Histogram(hist) => hist
+                        .buckets
+                        .iter()
+                        .map(|bucket| {
+                            if formatted_labels.is_empty() {
+                                format!(
+                                    "{}_bucket{{le=\"{}\"}} {}\n",
+                                    printable_metric_name, bucket.le, bucket.count
+                                )
+                            } else {
+                                format!(
+                                    "{}_bucket{{{}, le=\"{}\"}} {}\n",
+                                    printable_metric_name,
+                                    formatted_labels,
+                                    bucket.le,
+                                    bucket.count
+                                )
+                            }
+                        })
+                        .chain(iter::once(format!(
+                            "{}_sum{{{}}} {}\n",
+                            printable_metric_name, formatted_labels, hist.sum
+                        )))
+                        .chain(iter::once(format!(
+                            "{}_count{{{}}} {}",
+                            printable_metric_name, formatted_labels, hist.count
+                        )))
+                        .collect::<String>(),
+                    Inner::Time(_) | Inner::Percentiles(_) | Inner::TimeSerie(_) => {
                         // should not happen at that point
-                        return String::new();
+                        String::new()
                     }
                 }
             }
-            None => return String::new(),
-        };
-        let printable_metric_name = self.printable_name();
-        let formatted_labels: String = format_labels(&self.labels);
-        format!(
-            "{}{{{}}} {}",
-            printable_metric_name, formatted_labels, value
-        )
+            None => String::new(),
+        }
     }
 }
 
@@ -88,10 +136,10 @@ impl From<FilteredMetrics> for LabeledMetric {
             Some(inner) => match inner {
                 Inner::Gauge(_) => MetricType::Gauge,
                 Inner::Count(_) => MetricType::Counter,
-                Inner::Histogram(_)
-                | Inner::Time(_)
-                | Inner::Percentiles(_)
-                | Inner::TimeSerie(_) => MetricType::Unsupported,
+                Inner::Histogram(_) => MetricType::Histogram,
+                Inner::Time(_) | Inner::Percentiles(_) | Inner::TimeSerie(_) => {
+                    MetricType::Unsupported
+                }
             },
             None => MetricType::Unsupported,
         };
@@ -131,8 +179,7 @@ fn apply_labels(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
     // metrics of the main process
     for (metric_name, value) in aggregated_metrics.main.iter() {
         let mut labeled = LabeledMetric::from(value.clone());
-        labeled.with_name(metric_name);
-        labeled.with_label("worker", "main");
+        labeled.with_name(&format!("{}_main", metric_name));
 
         labeled_metrics.push(labeled);
     }
@@ -140,7 +187,7 @@ fn apply_labels(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
     // proxying metrics
     for (metric_name, value) in aggregated_metrics.proxying.iter() {
         let mut labeled = LabeledMetric::from(value.clone());
-        labeled.with_name(metric_name);
+        labeled.with_name(&format!("{}_total", metric_name));
 
         labeled_metrics.push(labeled);
     }
@@ -219,14 +266,6 @@ fn replace_dots_with_underscores(str: &str) -> String {
     str.replace('.', "_")
 }
 
-fn format_labels(labels: &[(String, String)]) -> String {
-    labels
-        .iter()
-        .map(|(name, value)| format!("{}=\"{}\"", name, value))
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
 #[cfg(test)]
 mod test {
     use std::collections::BTreeMap;
@@ -268,5 +307,26 @@ http_response_status{cluster_id="http%3A%2F%2Fmy-cluster-id.com%2Fapi%3Fparam%3D
 "#;
 
         assert_eq!(expected.to_string(), prometheus_metrics);
+    }
+
+    #[test]
+    fn format_labels() {
+        let metric = FilteredMetrics {
+            inner: Some(Inner::Count(3)),
+        };
+        let mut labeled_metric = LabeledMetric::from(metric);
+
+        assert_eq!(labeled_metric.formatted_labels(), "");
+
+        labeled_metric.with_label("le", "3");
+
+        assert_eq!(labeled_metric.formatted_labels(), r#"le="3""#);
+
+        labeled_metric.with_label("cluster_id", "http://my-cluster-id.com/api?param=value");
+
+        assert_eq!(
+            labeled_metric.formatted_labels(),
+            r#"le="3",cluster_id="http%3A%2F%2Fmy-cluster-id.com%2Fapi%3Fparam%3Dvalue""#
+        )
     }
 }
