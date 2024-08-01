@@ -3,21 +3,20 @@
 //! This module provides middlewares to give to the server implementation.
 //! It could be seen as interceptor in h2.
 
-use std::time::Instant;
+use std::{sync::LazyLock, time::Instant};
 
 use axum::{
     body::Body,
     http::{header, Request},
     middleware::Next,
 };
-use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use tracing::{info, info_span, Instrument};
 
 // -----------------------------------------------------------------------------
 // Telemetry
 
-static ACCESS_REQUEST: Lazy<IntCounterVec> = Lazy::new(|| {
+static ACCESS_REQUEST: LazyLock<IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
         "http_access_requests_count",
         "Number of access request",
@@ -26,7 +25,7 @@ static ACCESS_REQUEST: Lazy<IntCounterVec> = Lazy::new(|| {
     .expect("'http_access_requests_count' to not be already registered")
 });
 
-static ACCESS_REQUEST_DURATION: Lazy<IntCounterVec> = Lazy::new(|| {
+static ACCESS_REQUEST_DURATION: LazyLock<IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
         "http_access_requests_duration",
         "Duration of access request",
