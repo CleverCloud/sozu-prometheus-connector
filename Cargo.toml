@@ -3,7 +3,7 @@ name = "sozu-prometheus-connector"
 description = "This application retrieve internals metrics of Sōzu and format them into prometheus"
 homepage = "https://github.com/CleverCloud/sozu-prometheus-connector"
 documentation = "https://github.com/CleverCloud/sozu-prometheus-connector/blob/main/README.md"
-version = "0.2.2-rc.1"
+version = "1.1.0-rc.0"
 rust-version = "1.80.0"
 edition = "2021"
 license-file = "LICENSE"
@@ -22,7 +22,7 @@ serde = { version = "^1.0.195", features = ["derive"] }
 serde_json = "^1.0.111"
 sentry = { version = "^0.34.0", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 sentry-tracing = "^0.34.0"
-sozu-client = "0.4.2-rc.1"
+sozu-client = "1.1.0-rc.1"
 sozu-command-lib = "1.1.0-rc.1"
 thiserror = "^1.0.56"
 tokio = { version = "^1.35.1", features = ["macros", "rt", "signal"] }
