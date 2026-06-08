@@ -1,5 +1,5 @@
 [Unit]
-Description = Transmit requests to Sōzu, consuming a pulsar topic
+Description = Expose Sōzu internal metrics in Prometheus format
 Documentation = https://github.com/cleverCloud/sozu-prometheus-connector
 After = network-online.target local-fs.target remote-fs.target time-sync.target
 Requires = network-online.target local-fs.target remote-fs.target time-sync.target

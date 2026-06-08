@@ -42,6 +42,11 @@ pub struct Sozu {
 pub struct ConnectorConfiguration {
     #[serde(rename = "listening-address")]
     pub listening_address: SocketAddr,
+    /// Emit per-worker metric series (labelled with `worker_id`) in addition to
+    /// the aggregated ones. Disabled by default to keep the exported output
+    /// byte-identical to earlier releases and to avoid the extra cardinality.
+    #[serde(rename = "per-worker-metrics", default)]
+    pub per_worker_metrics: bool,
     #[serde(rename = "sozu")]
     pub sozu: Sozu,
     #[serde(rename = "sentry")]
