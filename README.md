@@ -5,55 +5,72 @@ packages the responses in a Prometheus format and sends them back in a HTTP resp
 
 ## Configure
 
-In the `config.toml` of this repository,
-you have to indicate the absolute path to the configuration file
-of the Sōzu that runs on the machine.
+The connector is configured through a TOML file (see [`example.config.toml`](./example.config.toml)).
+It is loaded either from the path given with `--config`, or from the first of the
+following locations that exists: `/usr/share/sozu-prometheus-connector/config`,
+`/etc/sozu-prometheus-connector/config`, `$HOME/.config/sozu-prometheus-connector/config`,
+`$HOME/.local/share/sozu-prometheus-connector/config`, or `config` in the working directory.
 
 ```toml
-sozu_configuration_path = "/path/to/sozu/on/the/machine/config.toml"
+# Socket address on which to listen. Must be parsable to a SocketAddr.
+listening-address = "0.0.0.0:3000"
+
+# Emit per-worker metric series (labelled with `worker_id`) in addition to the
+# aggregated ones. Optional, defaults to false (see "Per-worker metrics" below).
+# per-worker-metrics = false
+
+[sozu]
+# Path to Sōzu's configuration file. It is parsed to find the unix command
+# socket on which to query Sōzu.
+configuration = "/path/to/sozu/on/the/machine/config.toml"
+
+# Optional: forward errors to a Sentry/GlitchTip endpoint.
+# [sentry]
+# dsn = "https://..."
+# env = "production"
 ```
 
-The Sōzu config file will be parsed to find to unix socket on which to write requests to Sōzu.
+## Per-worker metrics
 
-You will have to provide a socket address on which the prometheus connector will
-wait for HTTP requests on the `/metrics` path.
+By default the connector exports only the metrics Sōzu aggregates across all of
+its workers (the `main`, `proxying`, and per-`cluster_id`/`backend_id` series),
+which keeps cardinality low and the output stable across releases.
 
-```toml
-# address on which to listen. Must be parsable to the SocketAddr type
-listening_address = "0.0.0.0:3000"
-```
+Setting `per-worker-metrics = true` additionally requests the per-worker
+breakdown from Sōzu and exports it:
 
-you can also chose to flatten all metric and to compound them if they have the same name,
-turning thig:
-
-```
-# TYPE bytes_out counter
-bytes_out{worker="0"} 246
-bytes_out{cluster_id="MyCluster",backend_id="the-backend-to-my-app"} 250
-bytes_out{cluster_id="MyCluster",backend_id="the-backend-to-my-app-2"} 250
-bytes_out{worker="1"} 246
-bytes_out{cluster_id="MyCluster",backend_id="the-backend-to-my-app"} 250
-bytes_out{cluster_id="MyCluster",backend_id="the-backend-to-my-app-2"} 250
-```
-
-into this:
+- worker proxy metrics are emitted under a distinct `_worker`-suffixed family,
+  labelled with `worker_id` (e.g. `bytes_in_worker{worker_id="0"}`), so they
+  never share a metric name with the aggregated `_total` series;
+- per-worker cluster and backend metrics keep the aggregated metric name and
+  gain a `worker_id` label on top of `cluster_id` (and `backend_id`):
 
 ```
-# TYPE bytes_out counter
-bytes_out{} 492
-bytes_out{cluster_id="MyCluster"} 1000
+# aggregated (always present): no worker_id label
+requests{cluster_id="MyCluster"} 1000
+requests{cluster_id="MyCluster",backend_id="the-backend"} 500
+
+# per-worker (only when per-worker-metrics = true): worker_id label present
+requests{worker_id="0",cluster_id="MyCluster"} 600
+requests{worker_id="0",cluster_id="MyCluster",backend_id="the-backend"} 300
 ```
 
-You can do this with:
+Because the aggregated and per-worker cluster/backend series share a metric name
+and differ only by the presence of the `worker_id` label, select one or the
+other in PromQL to avoid double-counting:
 
-```toml
-aggregate-backend-metrics = true
+```promql
+# aggregated only (across all workers)
+sum(requests{worker_id=""})
+
+# per-worker only
+sum by (worker_id) (requests{worker_id!=""})
 ```
 
 ## How to test
 
 1. Run Sōzu on your machine
 2. Run `sozu-prometheus-connector` with `cargo run -- --config config.toml`
-3. In a web browser, query the URL `127.0.0.1:3000`
+3. Query the URL `http://127.0.0.1:3000/metrics` (e.g. with `curl` or a browser)
 
-The prometheus-formatted metrics should appear in the browser.
+The prometheus-formatted metrics should appear in the response.

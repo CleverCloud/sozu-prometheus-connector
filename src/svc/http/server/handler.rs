@@ -86,9 +86,13 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
     // -------------------------------------------------------------------------
     // Query Sōzu to get its internal metrics
     debug!("Querying Sōzu metrics");
-    let mut sozu_metrics = match state
+    let per_worker_metrics = state.config.per_worker_metrics;
+    let sozu_metrics = match state
         .client
-        .send(RequestType::QueryMetrics(QueryMetricsOptions::default()))
+        .send(RequestType::QueryMetrics(QueryMetricsOptions {
+            workers: per_worker_metrics,
+            ..Default::default()
+        }))
         .await
     {
         Ok(command::Response {
@@ -97,7 +101,7 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
                     content_type: Some(ContentType::Metrics(aggregated_metrics)),
                 }),
             ..
-        }) => convert_metrics_to_prometheus(aggregated_metrics),
+        }) => convert_metrics_to_prometheus(aggregated_metrics, per_worker_metrics),
         Ok(response) => {
             let headers = res.headers_mut();
             let message = serde_json::json!({
@@ -188,7 +192,7 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
     // -------------------------------------------------------------------------
     // Answer to http request
 
-    buf.append(unsafe { sozu_metrics.as_mut_vec() });
+    buf.append(&mut sozu_metrics.into_bytes());
 
     let headers = res.headers_mut();
 

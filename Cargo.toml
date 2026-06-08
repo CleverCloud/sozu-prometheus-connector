@@ -3,8 +3,8 @@ name = "sozu-prometheus-connector"
 description = "This application retrieve internals metrics of Sōzu and format them into prometheus"
 homepage = "https://github.com/CleverCloud/sozu-prometheus-connector"
 documentation = "https://github.com/CleverCloud/sozu-prometheus-connector/blob/main/README.md"
-version = "0.2.3"
-rust-version = "1.80.0"
+version = "0.3.0"
+rust-version = "1.88.0"
 edition = "2021"
 license-file = "LICENSE"
 authors = ["Emmanuel Bosquet <emmanuel.bosquet@clever-cloud.com>", "Florentin Dubois <florentin.dubois@clever-cloud.com>"]
@@ -12,20 +12,20 @@ authors = ["Emmanuel Bosquet <emmanuel.bosquet@clever-cloud.com>", "Florentin Du
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = { version = "^0.7.4", features = ["tokio"] }
-config = "^0.14.0"
-clap = { version = "^4.4.18", features = ["derive"] }
+axum = { version = "^0.8", features = ["tokio"] }
+config = "^0.15"
+clap = { version = "^4.6", features = ["derive"] }
 mime = "^0.3.17"
 paw = "^1.0.0"
-prometheus = "^0.13.3"
-serde = { version = "^1.0.195", features = ["derive"] }
-serde_json = "^1.0.111"
-sentry = { version = "^0.34.0", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
-sentry-tracing = "^0.34.0"
-sozu-client = "0.4.3"
-sozu-command-lib = "1.0.5"
-thiserror = "^1.0.56"
-tokio = { version = "^1.35.1", features = ["macros", "rt", "signal"] }
-tracing = "^0.1.40"
-tracing-subscriber = "^0.3.18"
+prometheus = "^0.14"
+serde = { version = "^1.0.228", features = ["derive"] }
+serde_json = "^1.0.150"
+sentry = { version = "^0.48", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+sentry-tracing = "^0.48"
+sozu-client = "0.5.0"
+sozu-command-lib = "2.1.0"
+thiserror = "^2"
+tokio = { version = "^1", features = ["macros", "rt", "signal"] }
+tracing = "^0.1"
+tracing-subscriber = "^0.3"
 urlencoding = "2.1.3"

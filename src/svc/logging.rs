@@ -28,7 +28,7 @@ pub struct SentryContext {
     /// The Data Source Name of our API, typically "https://something@glitchtip.corp.clever-cloud.com/xx"
     pub dsn: String,
     /// Possible values: "development" or "production",
-    /// see https://docs.rs/sentry/0.31.3/sentry/struct.ClientOptions.html#structfield.environment
+    /// see https://docs.rs/sentry/0.48.2/sentry/struct.ClientOptions.html#structfield.environment
     pub env: String,
 }
 
@@ -84,8 +84,8 @@ pub fn initialize(verbosity: usize) -> Result<(), Error> {
 /// Most importantly, keep the produced logging guard in a variable that will not
 /// leave the main scope:
 ///
-/// ```
-/// use functions_sdk::logging::{initialize_with_sentry, SentryContext};
+/// ```no_run
+/// use sozu_prometheus_connector::svc::logging::{initialize_with_sentry, SentryContext};
 ///
 /// let _logging_guard_to_keep_around = initialize_with_sentry(
 ///     2,

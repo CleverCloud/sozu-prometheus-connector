@@ -1,6 +1,10 @@
 # Socket address on which to listen
 listening-address = "0.0.0.0:3000"
 
+# Emit per-worker metric series (labelled with `worker_id`) in addition to the
+# aggregated ones. Optional, defaults to false.
+# per-worker-metrics = false
+
 [sozu]
 # Path to Sōzu's configuration file
 configuration = "path/to/sozu/config.toml"
@@ -8,5 +12,5 @@ configuration = "path/to/sozu/config.toml"
 [sentry]
 # The Data Source Name of our API
 dsn = "https://..."
-# See https://docs.rs/sentry/0.31.3/sentry/struct.ClientOptions.html#structfield.environment
-environment = "production"
+# See https://docs.rs/sentry/0.48.2/sentry/struct.ClientOptions.html#structfield.environment
+env = "production"

@@ -12,7 +12,7 @@ jobs:
         rust:
           - stable
           - beta
-          - 1.80.0
+          - 1.88.0
         include:
           - rust: nightly
             experimental: true
@@ -20,21 +20,32 @@ jobs:
       - name: install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Install rust (${{ matrix.rust }})
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-          profile: minimal
-          override: true
+          components: clippy, rustfmt
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: ${{ matrix.features }}
+        run: cargo build --all-features
       - name: Test
-        uses: actions-rs/cargo@v1
+        run: cargo test --all-features --verbose
+
+  lint:
+    name: Lint (fmt + clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@master
         with:
-          command: test
-          args: --verbose ${{ matrix.features }}
+          toolchain: "1.88.0"
+          components: clippy, rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-features -- -D warnings
 ...

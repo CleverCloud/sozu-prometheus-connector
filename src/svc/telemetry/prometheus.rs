@@ -1,7 +1,7 @@
 use std::{fmt::Display, iter};
 
 use sozu_command_lib::proto::command::{
-    filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics,
+    filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics, WorkerMetrics,
 };
 use tracing::debug;
 use urlencoding::encode;
@@ -66,7 +66,7 @@ impl LabeledMetric {
     fn formatted_labels(&self) -> String {
         self.labels
             .iter()
-            .map(|(name, value)| format!("{}=\"{}\"", name, value))
+            .map(|(name, value)| format!("{name}=\"{value}\""))
             .collect::<Vec<_>>()
             .join(",")
     }
@@ -74,7 +74,7 @@ impl LabeledMetric {
     /// Create a metric line, typically:
     ///
     /// ```plain
-    /// http_active_requests{worker="0"} 0
+    /// http_active_requests{worker_id="0"} 0
     /// ```
     /// For histograms, several lines are produced: sum, count, buckets
     fn metric_line(&self) -> String {
@@ -83,14 +83,12 @@ impl LabeledMetric {
         match &self.value.inner {
             Some(inner) => {
                 match inner {
-                    Inner::Gauge(value) => format!(
-                        "{}{{{}}} {}",
-                        printable_metric_name, formatted_labels, value
-                    ),
-                    Inner::Count(value) => format!(
-                        "{}{{{}}} {}",
-                        printable_metric_name, formatted_labels, value
-                    ),
+                    Inner::Gauge(value) => {
+                        format!("{printable_metric_name}{{{formatted_labels}}} {value}")
+                    }
+                    Inner::Count(value) => {
+                        format!("{printable_metric_name}{{{formatted_labels}}} {value}")
+                    }
                     Inner::Histogram(hist) => hist
                         .buckets
                         .iter()
@@ -102,7 +100,7 @@ impl LabeledMetric {
                                 )
                             } else {
                                 format!(
-                                    "{}_bucket{{{}, le=\"{}\"}} {}\n",
+                                    "{}_bucket{{{},le=\"{}\"}} {}\n",
                                     printable_metric_name,
                                     formatted_labels,
                                     bucket.le,
@@ -153,10 +151,16 @@ impl From<FilteredMetrics> for LabeledMetric {
 }
 
 /// Convert aggregated metrics into prometheus serialize one
+///
+/// When `per_worker_metrics` is `true`, per-worker series (labelled with
+/// `worker_id`) are emitted in addition to the aggregated ones.
 #[tracing::instrument(skip_all)]
-pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> String {
+pub fn convert_metrics_to_prometheus(
+    aggregated_metrics: AggregatedMetrics,
+    per_worker_metrics: bool,
+) -> String {
     debug!("Converting metrics to prometheus format");
-    let labeled_metrics = apply_labels(aggregated_metrics);
+    let labeled_metrics = apply_labels(aggregated_metrics, per_worker_metrics);
 
     let metric_names = get_unique_metric_names(&labeled_metrics);
 
@@ -173,13 +177,16 @@ pub fn convert_metrics_to_prometheus(aggregated_metrics: AggregatedMetrics) -> S
 }
 
 /// assign worker_id and cluster_id as labels
-fn apply_labels(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
+fn apply_labels(
+    aggregated_metrics: AggregatedMetrics,
+    per_worker_metrics: bool,
+) -> Vec<LabeledMetric> {
     let mut labeled_metrics = Vec::new();
 
     // metrics of the main process
     for (metric_name, value) in aggregated_metrics.main.iter() {
         let mut labeled = LabeledMetric::from(value.clone());
-        labeled.with_name(&format!("{}_main", metric_name));
+        labeled.with_name(&format!("{metric_name}_main"));
 
         labeled_metrics.push(labeled);
     }
@@ -187,7 +194,7 @@ fn apply_labels(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
     // proxying metrics
     for (metric_name, value) in aggregated_metrics.proxying.iter() {
         let mut labeled = LabeledMetric::from(value.clone());
-        labeled.with_name(&format!("{}_total", metric_name));
+        labeled.with_name(&format!("{metric_name}_total"));
 
         labeled_metrics.push(labeled);
     }
@@ -214,6 +221,54 @@ fn apply_labels(aggregated_metrics: AggregatedMetrics) -> Vec<LabeledMetric> {
                 labeled.with_label("cluster_id", &cluster_id);
                 labeled.with_label("backend_id", &backend_id);
                 labeled_metrics.push(labeled);
+            }
+        }
+    }
+
+    // per-worker metrics (opt-in: QueryMetricsOptions.workers = true, gated by
+    // the `per-worker-metrics` configuration flag). Disabled by default to keep
+    // the exported output byte-identical to earlier releases.
+    if per_worker_metrics {
+        for (worker_id, worker_metrics) in aggregated_metrics.workers {
+            let WorkerMetrics { proxy, clusters } = worker_metrics;
+
+            // worker proxy metrics: a distinct `_worker`-suffixed family so they
+            // never share a metric name with the aggregated `_total` series.
+            for (metric_name, value) in proxy {
+                let mut labeled = LabeledMetric::from(value);
+                labeled.with_name(&format!("{metric_name}_worker"));
+                labeled.with_label("worker_id", &worker_id);
+                labeled_metrics.push(labeled);
+            }
+
+            // per-worker cluster + backend metrics keep the aggregated name and
+            // add a `worker_id` label on top of `cluster_id`(/`backend_id`):
+            // distinct label set, distinct series, no collision with the
+            // aggregated cluster/backend series.
+            for (cluster_id, cluster_metrics) in clusters {
+                for (metric_name, value) in cluster_metrics.cluster {
+                    let mut labeled = LabeledMetric::from(value);
+                    labeled.with_name(&metric_name);
+                    labeled.with_label("worker_id", &worker_id);
+                    labeled.with_label("cluster_id", &cluster_id);
+                    labeled_metrics.push(labeled);
+                }
+
+                for backend_metrics in cluster_metrics.backends {
+                    let BackendMetrics {
+                        backend_id,
+                        metrics,
+                    } = backend_metrics;
+
+                    for (metric_name, value) in metrics {
+                        let mut labeled = LabeledMetric::from(value);
+                        labeled.with_name(&metric_name);
+                        labeled.with_label("worker_id", &worker_id);
+                        labeled.with_label("cluster_id", &cluster_id);
+                        labeled.with_label("backend_id", &backend_id);
+                        labeled_metrics.push(labeled);
+                    }
+                }
             }
         }
     }
@@ -261,17 +316,13 @@ fn produce_lines_for_one_metric_name(
     lines
 }
 
-#[tracing::instrument(skip_all)]
-fn replace_dots_with_underscores(str: &str) -> String {
-    str.replace('.', "_")
-}
-
 #[cfg(test)]
 mod test {
     use std::collections::BTreeMap;
 
     use sozu_command_lib::proto::command::{
-        filtered_metrics::Inner, AggregatedMetrics, ClusterMetrics, FilteredMetrics,
+        filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, ClusterMetrics,
+        FilteredMetrics, WorkerMetrics,
     };
 
     use super::*;
@@ -300,13 +351,86 @@ mod test {
             ..Default::default()
         };
 
-        let prometheus_metrics = convert_metrics_to_prometheus(aggregated_metrics);
+        let prometheus_metrics = convert_metrics_to_prometheus(aggregated_metrics, false);
 
         let expected = r#"# TYPE http_response_status gauge
 http_response_status{cluster_id="http%3A%2F%2Fmy-cluster-id.com%2Fapi%3Fparam%3Dvalue"} 3
 "#;
 
         assert_eq!(expected.to_string(), prometheus_metrics);
+    }
+
+    #[test]
+    fn encode_per_worker_metrics() {
+        // worker proxy metric -> `_worker`-suffixed family labelled `worker_id`
+        let mut proxy = BTreeMap::new();
+        proxy.insert(
+            "bytes_in".to_owned(),
+            FilteredMetrics {
+                inner: Some(Inner::Count(246)),
+            },
+        );
+
+        // worker cluster metric -> aggregated name + `worker_id` + `cluster_id`
+        let mut cluster = BTreeMap::new();
+        cluster.insert(
+            "requests".to_owned(),
+            FilteredMetrics {
+                inner: Some(Inner::Count(10)),
+            },
+        );
+
+        // worker backend metric -> aggregated name + worker_id/cluster_id/backend_id
+        let mut backend_metrics = BTreeMap::new();
+        backend_metrics.insert(
+            "requests".to_owned(),
+            FilteredMetrics {
+                inner: Some(Inner::Count(4)),
+            },
+        );
+
+        let cluster_metrics = ClusterMetrics {
+            cluster,
+            backends: vec![BackendMetrics {
+                backend_id: "backend-1".to_owned(),
+                metrics: backend_metrics,
+            }],
+        };
+
+        let mut clusters = BTreeMap::new();
+        clusters.insert("MyCluster".to_owned(), cluster_metrics);
+
+        let mut workers = BTreeMap::new();
+        workers.insert("0".to_owned(), WorkerMetrics { proxy, clusters });
+
+        let aggregated_metrics = AggregatedMetrics {
+            workers,
+            ..Default::default()
+        };
+
+        // disabled -> no per-worker series at all
+        assert_eq!(
+            convert_metrics_to_prometheus(aggregated_metrics.clone(), false),
+            String::new()
+        );
+
+        // enabled -> per-worker series carry the expected labels
+        let prometheus_metrics = convert_metrics_to_prometheus(aggregated_metrics, true);
+
+        assert!(
+            prometheus_metrics.contains(r#"bytes_in_worker{worker_id="0"} 246"#),
+            "missing worker proxy series, got:\n{prometheus_metrics}"
+        );
+        assert!(
+            prometheus_metrics.contains(r#"requests{worker_id="0",cluster_id="MyCluster"} 10"#),
+            "missing per-worker cluster series, got:\n{prometheus_metrics}"
+        );
+        assert!(
+            prometheus_metrics.contains(
+                r#"requests{worker_id="0",cluster_id="MyCluster",backend_id="backend-1"} 4"#
+            ),
+            "missing per-worker backend series, got:\n{prometheus_metrics}"
+        );
     }
 
     #[test]
