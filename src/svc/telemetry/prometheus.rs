@@ -1,7 +1,7 @@
 use std::{fmt::Display, iter};
 
 use sozu_command_lib::proto::command::{
-    filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, FilteredMetrics, WorkerMetrics,
+    AggregatedMetrics, BackendMetrics, FilteredMetrics, WorkerMetrics, filtered_metrics::Inner,
 };
 use tracing::debug;
 use urlencoding::encode;
@@ -321,8 +321,8 @@ mod test {
     use std::collections::BTreeMap;
 
     use sozu_command_lib::proto::command::{
-        filtered_metrics::Inner, AggregatedMetrics, BackendMetrics, ClusterMetrics,
-        FilteredMetrics, WorkerMetrics,
+        AggregatedMetrics, BackendMetrics, ClusterMetrics, FilteredMetrics, WorkerMetrics,
+        filtered_metrics::Inner,
     };
 
     use super::*;

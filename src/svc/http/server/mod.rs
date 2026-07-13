@@ -6,11 +6,10 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
-    middleware,
+    Router, middleware,
     routing::{any, get},
-    Router,
 };
-use sozu_client::{channel::ConnectionProperties, config::canonicalize_command_socket, Client};
+use sozu_client::{Client, channel::ConnectionProperties, config::canonicalize_command_socket};
 use sozu_command_lib::config::Config;
 use tokio::net::TcpListener;
 use tracing::{debug, info};

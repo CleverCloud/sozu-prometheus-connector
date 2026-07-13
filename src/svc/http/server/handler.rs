@@ -7,12 +7,12 @@ use std::time::SystemTime;
 use axum::{
     body::Body,
     extract::State,
-    http::{header, HeaderValue, Request, Response, StatusCode},
+    http::{HeaderValue, Request, Response, StatusCode, header},
 };
 use prometheus::{Encoder, TextEncoder};
 use sozu_client::Sender;
 use sozu_command_lib::proto::command::{
-    self, request::RequestType, response_content::ContentType, QueryMetricsOptions, ResponseContent,
+    self, QueryMetricsOptions, ResponseContent, request::RequestType, response_content::ContentType,
 };
 use tracing::{debug, error};
 
