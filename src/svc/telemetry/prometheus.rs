@@ -321,8 +321,8 @@ mod test {
     use std::collections::BTreeMap;
 
     use sozu_command_lib::proto::command::{
-        AggregatedMetrics, BackendMetrics, ClusterMetrics, FilteredMetrics, WorkerMetrics,
-        filtered_metrics::Inner,
+        AggregatedMetrics, BackendMetrics, Bucket, ClusterMetrics, FilteredHistogram,
+        FilteredMetrics, RequestTcpFrontend, WorkerMetrics, filtered_metrics::Inner,
     };
 
     use super::*;
@@ -431,6 +431,88 @@ http_response_status{cluster_id="http%3A%2F%2Fmy-cluster-id.com%2Fapi%3Fparam%3D
             ),
             "missing per-worker backend series, got:\n{prometheus_metrics}"
         );
+    }
+
+    #[test]
+    fn exports_sozu_2_2_metrics() {
+        let tcp_frontend = RequestTcpFrontend {
+            sni: Some("example.com".to_owned()),
+            alpn: vec!["h2".to_owned()],
+            ..Default::default()
+        };
+        assert_eq!(tcp_frontend.sni.as_deref(), Some("example.com"));
+        assert_eq!(tcp_frontend.alpn, ["h2"]);
+
+        let counter_names = [
+            "http.frontend.transfer_encoding_smuggling",
+            "tcp.sni_preread.routed",
+            "tcp.sni_preread.rejected.not_tls",
+            "tcp.sni_preread.rejected.malformed_record",
+            "tcp.sni_preread.rejected.malformed_handshake",
+            "tcp.sni_preread.rejected.fragmented",
+            "tcp.sni_preread.rejected.too_large",
+            "tcp.sni_preread.rejected.no_sni",
+            "tcp.sni_preread.rejected.ech_outer_absent",
+            "tcp.sni_preread.rejected.sni_unmatched",
+            "tcp.sni_preread.rejected.alpn_unmatched",
+            "tcp.sni_preread.rejected.proxy_header_invalid",
+            "tcp.sni_preread.rejected.front_closed",
+            "tcp.upgrade.sni_preread.failed",
+        ];
+
+        let mut proxying = BTreeMap::new();
+        for (index, metric_name) in counter_names.iter().enumerate() {
+            proxying.insert(
+                (*metric_name).to_owned(),
+                FilteredMetrics {
+                    inner: Some(Inner::Count(index as i64 + 1)),
+                },
+            );
+        }
+        proxying.insert(
+            "tcp.sni_preread.active".to_owned(),
+            FilteredMetrics {
+                inner: Some(Inner::Gauge(2)),
+            },
+        );
+        proxying.insert(
+            "tcp.sni_preread.duration".to_owned(),
+            FilteredMetrics {
+                inner: Some(Inner::Histogram(FilteredHistogram {
+                    sum: 9,
+                    count: 2,
+                    buckets: vec![Bucket { count: 1, le: 5 }, Bucket { count: 2, le: 10 }],
+                })),
+            },
+        );
+
+        let metrics = convert_metrics_to_prometheus(
+            AggregatedMetrics {
+                proxying,
+                ..Default::default()
+            },
+            false,
+        );
+
+        for metric_name in counter_names {
+            let prometheus_name = format!("{}_total", metric_name.replace('.', "_"));
+            assert!(
+                metrics.contains(&format!("# TYPE {prometheus_name} counter")),
+                "missing counter type for {prometheus_name}, got:\n{metrics}"
+            );
+            assert!(
+                metrics.contains(&format!("{prometheus_name}{{}} ")),
+                "missing counter sample for {prometheus_name}, got:\n{metrics}"
+            );
+        }
+
+        assert!(metrics.contains("# TYPE tcp_sni_preread_active_total gauge"));
+        assert!(metrics.contains("tcp_sni_preread_active_total{} 2"));
+        assert!(metrics.contains("# TYPE tcp_sni_preread_duration_total histogram"));
+        assert!(metrics.contains(r#"tcp_sni_preread_duration_total_bucket{le="5"} 1"#));
+        assert!(metrics.contains(r#"tcp_sni_preread_duration_total_bucket{le="10"} 2"#));
+        assert!(metrics.contains("tcp_sni_preread_duration_total_sum{} 9"));
+        assert!(metrics.contains("tcp_sni_preread_duration_total_count{} 2"));
     }
 
     #[test]
