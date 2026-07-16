@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-16
+
 ### Added
 
 - Support for the Sōzu 2.2 metric families introduced for TCP passthrough
@@ -87,5 +89,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dead `replace_dots_with_underscores` helper (no call sites).
 
-[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.3.1...v0.4.0
 [0.3.0]: https://github.com/CleverCloud/sozu-prometheus-connector/releases/tag/v0.3.0
