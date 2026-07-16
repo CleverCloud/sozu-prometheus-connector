@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Support for the Sōzu 2.2 metric families introduced for TCP passthrough
+  routing by TLS SNI and ALPN:
+  - `tcp.sni_preread.routed`, `tcp.sni_preread.active`, and
+    `tcp.sni_preread.duration`;
+  - `tcp.sni_preread.rejected.{not_tls,malformed_record,malformed_handshake,fragmented,too_large,no_sni,ech_outer_absent,sni_unmatched,alpn_unmatched,proxy_header_invalid,front_closed}`;
+  - `tcp.upgrade.sni_preread.failed`.
+- Support for Sōzu's `http.frontend.transfer_encoding_smuggling` counter.
+  Dotted Sōzu names continue to be exported with underscores and the existing
+  `_total` suffix for aggregated proxy metrics or `_worker` suffix when
+  per-worker metrics are enabled.
+
+### Changed
+
+- Upgraded `sozu-command-lib` `2.1.1` → `2.2.0` and `sozu-client`
+  `0.5.0` → `0.5.1`, and refreshed all compatible dependencies.
+- Updated the CI minimum Rust toolchain from `1.88.0` to `1.91.0`, matching
+  `Cargo.toml`, `rust-toolchain`, and the Sōzu 2.2 dependency requirement.
+
 ## [0.3.0]
 
 ### Added
@@ -65,4 +87,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dead `replace_dots_with_underscores` helper (no call sites).
 
+[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.3.1...HEAD
 [0.3.0]: https://github.com/CleverCloud/sozu-prometheus-connector/releases/tag/v0.3.0
