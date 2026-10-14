@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-14
+
 ### Changed
 
 - Upgraded `sozu-command-lib` `2.2.0` → `2.3.0` and `sozu-client`
@@ -102,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dead `replace_dots_with_underscores` helper (no call sites).
 
-[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.3.1...v0.4.0
 [0.3.0]: https://github.com/CleverCloud/sozu-prometheus-connector/releases/tag/v0.3.0
