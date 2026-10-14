@@ -2545,9 +2545,9 @@ dependencies = [
 
 [[package]]
 name = "sozu-client"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02d5ee9cf0772af6f4a5157851ab20d77f78aa67ce9eeeb8b5988eef5ee89b19"
+checksum = "8be51b4bc573fcb3cc46b4c0f9f7bf5b52a788843e4607a1cb4fde646f5b41fd"
 dependencies = [
  "async-trait",
  "bb8",
@@ -2563,9 +2563,9 @@ dependencies = [
 
 [[package]]
 name = "sozu-command-lib"
-version = "2.3.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c192012c8bda03e39be7e675a663abe0e4c26e4ee04f1626bd38aa40a9c22f73"
+checksum = "9266d6e661c1067c60b38193a5b087557ddf8fbc8815723b9f820cb3dc694bd1"
 dependencies = [
  "hex",
  "libc",
@@ -2592,7 +2592,7 @@ dependencies = [
 
 [[package]]
 name = "sozu-prometheus-connector"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "clap",

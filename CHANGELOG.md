@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-15
+
+### Changed
+
+- Upgraded `sozu-command-lib` `2.3.0` → `2.3.1` and `sozu-client`
+  `0.6.0` → `0.6.1` to align the connector's protocol types with Sōzu 2.3.1.
+  Deploy the Sōzu 2.3.1 runtime itself to obtain the worker configuration
+  rollback fix when a frontend order is refused.
+- Verified that Sōzu 2.3.1 preserves aggregate metrics in both connector modes
+  and adds worker-labelled series only when `per-worker-metrics = true`.
+
 ## [0.5.0] - 2026-10-14
 
 ### Changed
@@ -104,7 +115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dead `replace_dots_with_underscores` helper (no call sites).
 
-[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.3.1...v0.4.0
 [0.3.0]: https://github.com/CleverCloud/sozu-prometheus-connector/releases/tag/v0.3.0
