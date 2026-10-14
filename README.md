@@ -5,9 +5,10 @@ packages the responses in a Prometheus format and sends them back in a HTTP resp
 
 ## Compatibility
 
-The current development version targets Sōzu 2.3 and requires Rust 1.93.1 or
-newer. Upgrade the connector together with Sōzu so the command protocol types
-stay aligned.
+The current development version targets Sōzu 2.3.1 and requires Rust 1.93.1 or
+newer. Upgrade the connector together with the Sōzu 2.3.1 runtime so the command
+protocol types stay aligned and the server applies its worker configuration
+rollback fix when a frontend order is refused.
 
 ## Configure
 
