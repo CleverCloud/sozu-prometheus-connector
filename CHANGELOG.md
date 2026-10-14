@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded `sozu-command-lib` `2.2.0` → `2.3.0` and `sozu-client`
+  `0.5.1` → `0.6.0` for Sōzu 2.3 compatibility. The generic exporter
+  continues to expose new Sōzu counters and gauges without a connector-side
+  allow-list.
+- Preserved aggregate series when `per-worker-metrics = true` by collecting the
+  aggregate and worker breakdown with consecutive Sōzu queries.
+- Updated every direct dependency to its latest stable release and refreshed
+  the full lockfile through Cargo.
+- Raised the Minimum Supported Rust Version from `1.91.0` to `1.93.1`, matching
+  `sozu-command-lib 2.3.0`.
+
 ## [0.4.0] - 2026-07-16
 
 ### Added
