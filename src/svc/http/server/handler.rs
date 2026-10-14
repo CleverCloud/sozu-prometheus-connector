@@ -10,9 +10,10 @@ use axum::{
     http::{HeaderValue, Request, Response, StatusCode, header},
 };
 use prometheus::{Encoder, TextEncoder};
-use sozu_client::Sender;
+use sozu_client::{Client, Sender};
 use sozu_command_lib::proto::command::{
-    self, QueryMetricsOptions, ResponseContent, request::RequestType, response_content::ContentType,
+    self, AggregatedMetrics, QueryMetricsOptions, ResponseContent, request::RequestType,
+    response_content::ContentType,
 };
 use tracing::{debug, error};
 
@@ -23,6 +24,45 @@ use crate::svc::{http::server, telemetry::prometheus::convert_metrics_to_prometh
 
 pub const X_REQUEST_ID: &str = "X-Request-Id";
 pub const X_TIMESTAMP: &str = "X-Timestamp";
+
+// -----------------------------------------------------------------------------
+// Sōzu metrics query
+
+#[derive(Debug)]
+enum QueryMetricsError {
+    Client(sozu_client::Error),
+    InvalidResponse(command::Response),
+}
+
+async fn query_metrics(
+    client: &Client,
+    workers: bool,
+) -> Result<AggregatedMetrics, QueryMetricsError> {
+    match client
+        .send(RequestType::QueryMetrics(QueryMetricsOptions {
+            workers,
+            ..Default::default()
+        }))
+        .await
+    {
+        Ok(command::Response {
+            content:
+                Some(ResponseContent {
+                    content_type: Some(ContentType::Metrics(aggregated_metrics)),
+                }),
+            ..
+        }) => Ok(aggregated_metrics),
+        Ok(response) => Err(QueryMetricsError::InvalidResponse(response)),
+        Err(err) => Err(QueryMetricsError::Client(err)),
+    }
+}
+
+fn include_worker_metrics(
+    aggregated_metrics: &mut AggregatedMetrics,
+    worker_metrics: AggregatedMetrics,
+) {
+    aggregated_metrics.workers = worker_metrics.workers;
+}
 
 // -----------------------------------------------------------------------------
 // Not found
@@ -87,22 +127,23 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
     // Query Sōzu to get its internal metrics
     debug!("Querying Sōzu metrics");
     let per_worker_metrics = state.config.per_worker_metrics;
-    let sozu_metrics = match state
-        .client
-        .send(RequestType::QueryMetrics(QueryMetricsOptions {
-            workers: per_worker_metrics,
-            ..Default::default()
-        }))
-        .await
-    {
-        Ok(command::Response {
-            content:
-                Some(ResponseContent {
-                    content_type: Some(ContentType::Metrics(aggregated_metrics)),
-                }),
-            ..
-        }) => convert_metrics_to_prometheus(aggregated_metrics, per_worker_metrics),
-        Ok(response) => {
+    let aggregated_metrics = async {
+        let mut aggregated_metrics = query_metrics(&state.client, false).await?;
+
+        if per_worker_metrics {
+            let worker_metrics = query_metrics(&state.client, true).await?;
+            include_worker_metrics(&mut aggregated_metrics, worker_metrics);
+        }
+
+        Ok::<_, QueryMetricsError>(aggregated_metrics)
+    }
+    .await;
+
+    let sozu_metrics = match aggregated_metrics {
+        Ok(aggregated_metrics) => {
+            convert_metrics_to_prometheus(aggregated_metrics, per_worker_metrics)
+        }
+        Err(QueryMetricsError::InvalidResponse(response)) => {
             let headers = res.headers_mut();
             let message = serde_json::json!({
                 "error":
@@ -134,7 +175,7 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
             );
             return res;
         }
-        Err(err) => {
+        Err(QueryMetricsError::Client(err)) => {
             let headers = res.headers_mut();
             let message = serde_json::json!({"error": err.to_string() }).to_string();
 
@@ -212,4 +253,42 @@ pub async fn telemetry(State(state): State<server::State>, _req: Request<Body>) 
     *res.body_mut() = Body::from(buf);
 
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use sozu_command_lib::proto::command::{
+        FilteredMetrics, WorkerMetrics, filtered_metrics::Inner,
+    };
+
+    use super::*;
+
+    #[test]
+    fn includes_workers_without_replacing_aggregated_metrics() {
+        let mut proxying = BTreeMap::new();
+        proxying.insert(
+            "requests".to_owned(),
+            FilteredMetrics {
+                inner: Some(Inner::Count(2)),
+            },
+        );
+        let mut aggregated_metrics = AggregatedMetrics {
+            proxying,
+            ..Default::default()
+        };
+
+        let mut workers = BTreeMap::new();
+        workers.insert("0".to_owned(), WorkerMetrics::default());
+        let worker_metrics = AggregatedMetrics {
+            workers,
+            ..Default::default()
+        };
+
+        include_worker_metrics(&mut aggregated_metrics, worker_metrics);
+
+        assert!(aggregated_metrics.proxying.contains_key("requests"));
+        assert!(aggregated_metrics.workers.contains_key("0"));
+    }
 }

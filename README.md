@@ -3,6 +3,12 @@
 Receives HTTP GET requests on a `/metrics` route, forwards the request to Sōzu,
 packages the responses in a Prometheus format and sends them back in a HTTP response.
 
+## Compatibility
+
+The current development version targets Sōzu 2.3 and requires Rust 1.93.1 or
+newer. Upgrade the connector together with Sōzu so the command protocol types
+stay aligned.
+
 ## Configure
 
 The connector is configured through a TOML file (see [`example.config.toml`](./example.config.toml)).
@@ -37,7 +43,9 @@ its workers (the `main`, `proxying`, and per-`cluster_id`/`backend_id` series),
 which keeps cardinality low and the output stable across releases.
 
 Setting `per-worker-metrics = true` additionally requests the per-worker
-breakdown from Sōzu and exports it:
+breakdown from Sōzu and exports it. The aggregate and worker breakdown come
+from two consecutive Sōzu queries, so a scrape does not represent one atomic
+snapshot when metrics change between those queries:
 
 - worker proxy metrics are emitted under a distinct `_worker`-suffixed family,
   labelled with `worker_id` (e.g. `bytes_in_worker{worker_id="0"}`), so they

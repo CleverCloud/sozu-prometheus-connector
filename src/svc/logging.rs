@@ -2,8 +2,6 @@
 //!
 //! This module provides logging facilities and helpers
 
-use std::borrow::Cow;
-
 use serde::{Deserialize, Serialize};
 use tracing::Level;
 use tracing_subscriber::prelude::*;
@@ -28,7 +26,7 @@ pub struct SentryContext {
     /// The Data Source Name of our API, typically "https://something@glitchtip.corp.clever-cloud.com/xx"
     pub dsn: String,
     /// Possible values: "development" or "production",
-    /// see https://docs.rs/sentry/0.48.2/sentry/struct.ClientOptions.html#structfield.environment
+    /// see https://docs.rs/sentry/0.49.3/sentry/struct.ClientOptions.html#method.environment
     pub env: String,
 }
 
@@ -136,12 +134,9 @@ fn sentry_initialize(dsn: String, environment: String) -> Option<sentry::ClientI
         return None;
     }
 
-    Some(sentry::init((
-        dsn,
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            environment: Some(Cow::from(environment)),
-            ..sentry::ClientOptions::default()
-        },
-    )))
+    let options = sentry::ClientOptions::new()
+        .maybe_release(sentry::release_name!())
+        .environment(environment);
+
+    Some(sentry::init((dsn, options)))
 }
