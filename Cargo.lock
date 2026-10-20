@@ -283,6 +283,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
 dependencies = [
  "hybrid-array",
+ "zeroize",
 ]
 
 [[package]]
@@ -389,6 +390,12 @@ checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
 dependencies = [
  "cc",
 ]
+
+[[package]]
+name = "cmov"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "colorchoice"
@@ -508,6 +515,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctutils"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03bb0e1cc970d482d121d9a1744999169b69a07470b3d644a7894e53fcaf4574"
+dependencies = [
+ "cmov",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,6 +568,8 @@ dependencies = [
  "block-buffer",
  "const-oid",
  "crypto-common",
+ "ctutils",
+ "zeroize",
 ]
 
 [[package]]
@@ -853,6 +871,15 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hmac"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
+dependencies = [
+ "digest",
+]
 
 [[package]]
 name = "hostname"
@@ -2545,9 +2572,9 @@ dependencies = [
 
 [[package]]
 name = "sozu-client"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8be51b4bc573fcb3cc46b4c0f9f7bf5b52a788843e4607a1cb4fde646f5b41fd"
+checksum = "ac4fa2cb176b7762578228b7327d1c7b26f29b61e7d65e1ae0ea6d5dde1ff836"
 dependencies = [
  "async-trait",
  "bb8",
@@ -2563,11 +2590,13 @@ dependencies = [
 
 [[package]]
 name = "sozu-command-lib"
-version = "2.3.1"
+version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9266d6e661c1067c60b38193a5b087557ddf8fbc8815723b9f820cb3dc694bd1"
+checksum = "431ec1aff89a4f015d75be2b869ad273ce1a7011d7de14a8206346674d2888b6"
 dependencies = [
+ "getrandom 0.4.3",
  "hex",
+ "hmac",
  "libc",
  "log",
  "memchr",
@@ -2588,11 +2617,12 @@ dependencies = [
  "time",
  "toml",
  "x509-parser",
+ "zeroize",
 ]
 
 [[package]]
 name = "sozu-prometheus-connector"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "axum",
  "clap",
