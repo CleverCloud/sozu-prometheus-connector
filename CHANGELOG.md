@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded `sozu-command-lib` `2.3.1` → `2.3.3` and `sozu-client`
+  `0.6.1` → `0.6.2` to align the connector's protocol types with Sōzu 2.3.3.
+  The generic exporter continues to pass through the metrics Sōzu reports
+  without a connector-side allow-list. Aggregate series remain present when
+  `per-worker-metrics = true`; worker series are added with a `worker_id` label.
+
 ## [0.5.1] - 2026-10-15
 
 ### Changed
