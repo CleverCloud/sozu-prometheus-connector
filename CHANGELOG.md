@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-05
+
 ### Changed
 
 - Upgraded `sozu-command-lib` `2.3.1` → `2.3.3` and `sozu-client`
@@ -14,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The generic exporter continues to pass through the metrics Sōzu reports
   without a connector-side allow-list. Aggregate series remain present when
   `per-worker-metrics = true`; worker series are added with a `worker_id` label.
+- Upgraded `sozu-command-lib` `2.3.3` → `2.3.4` and `sozu-client` `0.6.2` →
+  `0.7.0`, along with `tokio` `1.53.3` → `1.54.1` and `sentry` and
+  `sentry-tracing` `0.49.3` → `0.49.5`. Every other direct dependency is
+  already at its latest release.
+- Replaced the deprecated combined `sentry_tracing::layer()` with the span,
+  breadcrumb and error layers configured to its default level selection:
+  `INFO` and above spans become transactions, `WARN` and `INFO` events
+  breadcrumbs, and `ERROR` events Sentry events.
 
 ## [0.5.1] - 2026-10-15
 
@@ -123,7 +133,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dead `replace_dots_with_underscores` helper (no call sites).
 
-[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CleverCloud/sozu-prometheus-connector/compare/v0.3.1...v0.4.0

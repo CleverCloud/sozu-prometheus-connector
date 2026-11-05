@@ -5,8 +5,8 @@ packages the responses in a Prometheus format and sends them back in a HTTP resp
 
 ## Compatibility
 
-The current development version (0.5.2) targets Sōzu 2.3.3
-(`sozu-command-lib` 2.3.3 and `sozu-client` 0.6.2) and requires Rust 1.93.1 or
+Version 0.5.2 targets Sōzu 2.3.4
+(`sozu-command-lib` 2.3.4 and `sozu-client` 0.7.0) and requires Rust 1.93.1 or
 newer. Upgrade the connector together with the Sōzu runtime so the command
 protocol types stay aligned. The exporter passes through every metric Sōzu
 reports generically, without a connector-side allow-list.
