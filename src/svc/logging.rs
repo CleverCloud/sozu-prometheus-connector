@@ -2,9 +2,13 @@
 //!
 //! This module provides logging facilities and helpers
 
+use sentry_tracing::{BreadcrumbLayer, ErrorLayer, SpanLayer};
 use serde::{Deserialize, Serialize};
 use tracing::Level;
-use tracing_subscriber::prelude::*;
+use tracing_subscriber::{
+    filter::{LevelFilter, filter_fn},
+    prelude::*,
+};
 
 // -----------------------------------------------------------------------------
 // Error enumeration
@@ -109,7 +113,14 @@ pub fn initialize_with_sentry(
 
     tracing_subscriber::registry()
         .with(format_layer)
-        .with(sentry_tracing::layer())
+        // The default selection of the former combined `sentry_tracing::layer()`:
+        // INFO and above spans become transactions, WARN and INFO events
+        // breadcrumbs, and ERROR events Sentry events.
+        .with(SpanLayer::new().with_filter(LevelFilter::INFO))
+        .with(BreadcrumbLayer::new().with_filter(filter_fn(|metadata| {
+            matches!(*metadata.level(), Level::WARN | Level::INFO)
+        })))
+        .with(ErrorLayer::new().with_filter(LevelFilter::ERROR))
         .try_init()
         .map_err(Error::TracingRegistry)?;
 
