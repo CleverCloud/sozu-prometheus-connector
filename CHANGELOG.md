@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded `sozu-command-lib` `2.3.4` → `2.3.7` to align the connector's
+  protocol types with Sōzu 2.3.7.
+- Raised the Minimum Supported Rust Version from `1.93.1` to `1.95.0`, matching
+  `sozu-command-lib 2.3.7`.
+
 ## [0.5.2] - 2026-11-05
 
 ### Changed
